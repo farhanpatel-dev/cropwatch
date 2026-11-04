@@ -1,0 +1,30 @@
+# Secrets: real values live only in .env on your machine
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ML data, checkpoints and experiment tracking (too large for Git)
+ml/data/
+*.pt
+*.onnx
+mlruns/
+mlartifacts/
+
+# Model hand-off files are copied in locally, not committed
+services/inference/models/*
+!services/inference/models/.gitkeep
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+.idea/
