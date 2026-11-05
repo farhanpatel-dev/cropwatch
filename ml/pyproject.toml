@@ -1,0 +1,30 @@
+# Makes ml/src/cropwatch_ml an installable package. Install once: ml\.venv\Scripts\python.exe -m pip install -e ml
+# Pinned dependencies live in requirements.txt, not here.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cropwatch-ml"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+# torch must be imported before mlflow/pandas/pyarrow on Windows (WinError 1114),
+# so it gets its own section that always sorts first.
+sections = { torch = ["torch", "torchvision"] }
+section-order = ["future", "torch", "standard-library", "third-party", "first-party", "local-folder"]
+known-first-party = ["cropwatch_ml"]
