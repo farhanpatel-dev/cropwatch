@@ -4,7 +4,7 @@ Copy of project file 03. Changes agreed on 2026-11-04: model input is RGB (3 cha
 
 Conventions: JSON over HTTP; geometry is GeoJSON in EPSG:4326 with [longitude, latitude]; ids are UUID strings for analyses and integers for polygons; areas in square metres (`area_m2`) in features and hectares (`area_ha`) in stats; errors use FastAPI's default body `{"detail": "message"}`. Changing this file requires updating the services and tests in the same pull request.
 
-## Classes (placeholder; confirm on the dataset site before training)
+## Classes (frozen; names match the Agriculture-Vision 2021 label folders)
 | id | name | colour |
 | --- | --- | --- |
 | 0 | background | transparent |
