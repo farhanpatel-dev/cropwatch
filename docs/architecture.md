@@ -33,7 +33,7 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 - Only geo connects to PostGIS.
 - Every service exposes GET /health and logs a request id.
 - Config only from environment variables (.env.example). No secrets in Git.
-- Model hand-off: `model.onnx` + `classes.yaml` (id, name, colour). Inference reports model name/version from `model_info.json` next to the file.
+- Model hand-off: `model.onnx` + `classes.yaml` (id, name, colour). Inference reports model name/version from `model_info.json` next to the file and takes its input normalisation (`preprocessing`: input_scale, per-channel mean and std from training) from the same file.
 
 ## Tech decisions (with alternatives)
 | Decision | Choice | Reason | Alternatives at larger scale |
