@@ -17,7 +17,7 @@ Copy of project file 02. Changes agreed on 2026-11-04: training runs on a local 
 1. Browser sends multipart file (and bounds if needed) to the gateway.
 2. Gateway validates type, size (max 50 MB) and bounds; keeps the file in memory or a temp path.
 3. Gateway calls inference `POST /predict` (timeout 60 s).
-4. Inference reads the image, normalises, cuts overlapping 256x256 tiles, runs the ONNX model, stitches the class mask, polygonizes with rasterio, simplifies, drops tiny shapes, reprojects to EPSG:4326, computes area and returns a GeoJSON FeatureCollection.
+4. Inference reads the image, normalises with the mean/std from `model_info.json` (see 03-api-contract, "Input normalisation"), cuts overlapping 256x256 tiles, runs the ONNX model, stitches the class mask, polygonizes with rasterio, simplifies, drops tiny shapes, reprojects to EPSG:4326, computes area and returns a GeoJSON FeatureCollection.
 5. Gateway calls geo `POST /analyses`, then `POST /analyses/{id}/polygons`, then `GET /stats?analysis_id=`.
 6. Gateway returns 201 with analysis id, model info, image bounds and stats.
 7. Browser calls `GET /api/v1/analyses/{id}/polygons` (or bbox query) and draws the layer.
@@ -33,7 +33,7 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 - Only geo connects to PostGIS.
 - Every service exposes GET /health and logs a request id.
 - Config only from environment variables (.env.example). No secrets in Git.
-- Model hand-off: `model.onnx` + `classes.yaml` (id, name, colour). Inference reports model name/version from `model_info.json` next to the file.
+- Model hand-off: `model.onnx` + `classes.yaml` (id, name, colour) + `model_info.json` (name, version, MLflow run id, tile size, normalisation mean/std), all written by `ml/scripts/export_onnx.py`, which also checks ONNX Runtime output against PyTorch. Inference reports model name/version and applies the normalisation from `model_info.json`; the three files always change together.
 
 ## Tech decisions (with alternatives)
 | Decision | Choice | Reason | Alternatives at larger scale |

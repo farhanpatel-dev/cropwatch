@@ -1,6 +1,6 @@
 # API contract and database schema (single source of truth)
 
-Copy of project file 03. Changes agreed on 2026-11-04: model input is RGB (3 channels); bbox query also filters by `analysis_id`; stats rule for bbox defined.
+Copy of project file 03. Changes agreed on 2026-11-04: model input is RGB (3 channels); bbox query also filters by `analysis_id`; stats rule for bbox defined. Agreed on 2026-11-07: input normalisation is defined by `model_info.json` (`preprocessing`) and reported by `/model-info`.
 
 Conventions: JSON over HTTP; geometry is GeoJSON in EPSG:4326 with [longitude, latitude]; ids are UUID strings for analyses and integers for polygons; areas in square metres (`area_m2`) in features and hectares (`area_ha`) in stats; errors use FastAPI's default body `{"detail": "message"}`. Changing this file requires updating the services and tests in the same pull request.
 
@@ -61,10 +61,38 @@ Responses that return polygons use `{"type": "FeatureCollection", "features": [ 
 | Method and path | Purpose |
 | --- | --- |
 | GET /health | liveness |
-| GET /model-info | `{"name":"unet","version":"3","mlflow_run_id":"...","input_channels":3,"tile_size":256,"classes":[{"id":0,"name":"background"}, ...]}` |
+| GET /model-info | `{"name":"unet","version":"3","mlflow_run_id":"...","input_channels":3,"tile_size":256,"classes":[{"id":0,"name":"background"}, ...],"preprocessing":{"mean":[r,g,b],"std":[r,g,b]}}` (fields read from `model_info.json`) |
 | POST /predict | multipart `file`, optional `bounds`. Response 200: `{"model":{"name","version"},"image":{"width","height","crs":"EPSG:4326","bounds":[minLon,minLat,maxLon,maxLat]},"polygons":FeatureCollection}` |
 
 Rules: the model takes 3 channels (RGB). For GeoTIFFs with more bands, bands 1 to 3 are used as RGB and the rest are ignored; single-band images are rejected with 400. Pixel size must not exceed 8000x8000 in the MVP (reject larger with 413); drop polygons smaller than 20 pixels; simplify tolerance of about 1 pixel; `confidence` is the mean softmax probability of the class inside the polygon.
+
+### Model files (`services/inference/models/`, written by `ml/scripts/export_onnx.py`)
+- `model.onnx`: input `image`, float32, shape `[N, 3, tile_size, tile_size]` (any N); output `logits`, shape `[N, num_classes, tile_size, tile_size]`. Class id per pixel = argmax over axis 1; `confidence` uses softmax over axis 1.
+- `classes.yaml`: unchanged copy of `ml/configs/classes.yaml`.
+- `model_info.json`: identifies the model and fixes its input normalisation. Example (run e9ed5ab1, rounded here; the file holds full precision):
+```json
+{
+  "name": "unet",
+  "version": "1",
+  "mlflow_run_id": "e9ed5ab1b49941c488489c8e8ee9de16",
+  "input_channels": 3,
+  "tile_size": 256,
+  "classes": [{"id": 0, "name": "background"}, {"id": 1, "name": "nutrient_deficiency"}, {"id": 2, "name": "drydown"}, {"id": 3, "name": "weed_cluster"}],
+  "input": {"name": "image", "shape": ["N", 3, 256, 256], "dtype": "float32"},
+  "output": {"name": "logits", "shape": ["N", 4, 256, 256]},
+  "preprocessing": {"mean": [0.4365, 0.4444, 0.4423], "std": [0.1645, 0.1524, 0.1566]}
+}
+```
+Extra fields (for example `checkpoint_epoch`, `opset`, `verified`) may be present and are informational.
+
+### Input normalisation (must match training exactly)
+For each tile, in this order:
+1. Take RGB as uint8 (0-255), height x width x 3. For GeoTIFFs, bands 1 to 3.
+2. Convert to float32 and divide by 255.
+3. Per channel: `(x - mean[c]) / std[c]`, with `mean` and `std` from `model_info.json` `preprocessing`. Channel order is R, G, B.
+4. Reorder to 3 x height x width (CHW) and stack tiles into a batch.
+
+`mean` and `std` were computed on the training split only (valid pixels, scaled to 0-1). Inference must read them from `model_info.json` and never hard-code them: every new model comes with its own values. A wrong or missing normalisation raises no error; it silently produces bad predictions.
 
 ## Geo : http://geo:8002 (internal only)
 | Method and path | Purpose |
