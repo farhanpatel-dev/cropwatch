@@ -149,6 +149,8 @@ class AgriVisionDataset(Dataset):
 
     mode="train": one random TxT crop per image per epoch.
     mode="val":   every non-overlapping TxT tile of every image (fixed, so runs are comparable).
+    cache=True:   read every image and target once and keep them in memory (fast epochs).
+    augment=True: random horizontal/vertical flips and 90-degree rotations (train mode only).
     """
 
     def __init__(
@@ -161,6 +163,8 @@ class AgriVisionDataset(Dataset):
         image_size: int = 512,
         mean: Sequence[float] | None = None,
         std: Sequence[float] | None = None,
+        cache: bool = False,
+        augment: bool = False,
     ) -> None:
         if mode not in ("train", "val"):
             raise ValueError("mode must be 'train' or 'val'")
@@ -175,6 +179,19 @@ class AgriVisionDataset(Dataset):
         self.tiles_per_side = image_size // tile_size
         self.mean = torch.tensor(mean or [0.0, 0.0, 0.0]).view(3, 1, 1)
         self.std = torch.tensor(std or [1.0, 1.0, 1.0]).view(3, 1, 1)
+        self.augment = augment and mode == "train"
+        self._cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        if cache:
+            for key in self.keys:
+                self._cache[key] = self._read(key)
+
+    def _read(self, key: str) -> tuple[np.ndarray, np.ndarray]:
+        if key in self._cache:
+            return self._cache[key]
+        rgb = read_rgb(self.split_dir, key)
+        if rgb.shape[:2] != (self.image_size, self.image_size):
+            raise ValueError(f"{key}: expected {self.image_size}px image, got {rgb.shape[:2]}")
+        return rgb, read_target(self.split_dir, key, self.class_ids)
 
     def __len__(self) -> int:
         if self.mode == "train":
@@ -194,12 +211,18 @@ class AgriVisionDataset(Dataset):
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         key, top, left = self._crop_origin(index)
-        rgb = read_rgb(self.split_dir, key)
-        target = read_target(self.split_dir, key, self.class_ids)
-        if rgb.shape[:2] != (self.image_size, self.image_size):
-            raise ValueError(f"{key}: expected {self.image_size}px image, got {rgb.shape[:2]}")
+        rgb, target = self._read(key)
         rgb = rgb[top : top + self.tile, left : left + self.tile]
         target = target[top : top + self.tile, left : left + self.tile]
+        if self.augment:  # same flip/rotation for image and target, so they stay aligned
+            if random.random() < 0.5:
+                rgb, target = rgb[:, ::-1], target[:, ::-1]
+            if random.random() < 0.5:
+                rgb, target = rgb[::-1], target[::-1]
+            k = random.randint(0, 3)
+            rgb, target = np.rot90(rgb, k), np.rot90(target, k)
         image = torch.from_numpy(rgb.copy()).permute(2, 0, 1).float() / 255.0
         image = (image - self.mean) / self.std
-        return image, torch.from_numpy(target.astype(np.int64))
+        return image, torch.from_numpy(
+            target.astype(np.int64)
+        )  # astype copies (no negative strides)
