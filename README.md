@@ -26,7 +26,7 @@ It misses about a third of nutrient-deficiency pixels and almost half of weed pi
 | `ml/scripts/` | `download_agvision.py`, `train_full.py`, `export_onnx.py` |
 | `ml/configs/classes.yaml` | The 4 classes (frozen) |
 | `services/inference/` | FastAPI + ONNX Runtime service, port 8001, its own venv. No PyTorch |
-| `services/inference/models/` | `model.onnx`, `model_info.json`, `classes.yaml` (written by the export; not in Git) |
+| `services/inference/models/` | `model.onnx`, `model_info.json`, `classes.yaml` (written by the export; v3 is committed, 98 MB) |
 
 Commands below are for PowerShell on Windows, run from the repo root.
 
@@ -63,7 +63,7 @@ ml\.venv\Scripts\python.exe ml\scripts\export_onnx.py --run-id <MLflow run id> -
 This writes the three model files to `services/inference/models/` and checks ONNX Runtime against PyTorch on 32 validation tiles. Only use the export if the check reports (almost) all pixels agreeing. `model_info.json` holds the normalisation mean/std; the service reads it from there, so the three files must always be replaced together.
 
 ### 5. Run the inference service
-In Docker (needs the model files from step 4 before building):
+In Docker (the v3 model files are in Git, so a fresh clone builds without steps 1-4):
 ```powershell
 docker compose up -d --build inference
 docker compose ps            # inference should show (healthy)
