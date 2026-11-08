@@ -1,0 +1,6 @@
+# Local development and CI: runtime dependencies plus test and lint tools.
+# Install: services\inference\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.2.0
+ruff==0.17.4
+httpx==0.28.1

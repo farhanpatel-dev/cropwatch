@@ -40,6 +40,18 @@ services:
       retries: 10
     restart: unless-stopped
 
+  inference:
+    build: ./services/inference
+    environment:
+      MODEL_PATH: ${MODEL_PATH:-/app/models/model.onnx}
+      MODEL_INFO_PATH: ${MODEL_INFO_PATH:-/app/models/model_info.json}
+      TILE_SIZE: ${TILE_SIZE:-256}
+      TILE_OVERLAP: ${TILE_OVERLAP:-32}
+    ports:
+      - "8001:8001"
+    # Health check is defined in services/inference/Dockerfile.
+    restart: unless-stopped
+
 volumes:
   postgis-data:
   mlflow-data:

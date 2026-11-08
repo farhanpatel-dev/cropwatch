@@ -64,7 +64,7 @@ Responses that return polygons use `{"type": "FeatureCollection", "features": [ 
 | GET /model-info | `{"name":"unet","version":"3","mlflow_run_id":"...","input_channels":3,"tile_size":256,"classes":[{"id":0,"name":"background"}, ...]}` |
 | POST /predict | multipart `file`, optional `bounds`. Response 200: `{"model":{"name","version"},"image":{"width","height","crs":"EPSG:4326","bounds":[minLon,minLat,maxLon,maxLat]},"polygons":FeatureCollection}` |
 
-Rules: the model takes 3 channels (RGB). For GeoTIFFs with more bands, bands 1 to 3 are used as RGB and the rest are ignored; single-band images are rejected with 400. Pixel size must not exceed 8000x8000 in the MVP (reject larger with 413); drop polygons smaller than 20 pixels; simplify tolerance of about 1 pixel; `confidence` is the mean softmax probability of the class inside the polygon.
+Rules: the model takes 3 channels (RGB). For GeoTIFFs with more bands, bands 1 to 3 are used as RGB and the rest are ignored; images with fewer than 3 bands or not 8-bit (uint8) are rejected with 400. Pixel size must not exceed 6000x6000 in the MVP (reject larger with 413; lowered from 8000 on 2026-11-08 because a 6000x6000 image already takes about 41 s on a laptop CPU and the gateway timeout is 60 s); drop polygons smaller than 20 pixels; simplify tolerance of about 1 pixel; `confidence` is the mean softmax probability of the class inside the polygon.
 
 ## Geo : http://geo:8002 (internal only)
 | Method and path | Purpose |
