@@ -1,0 +1,7 @@
+# Runtime dependencies of the inference service (also used by the Docker image).
+# No PyTorch here: the model runs with ONNX Runtime.
+numpy==2.4.6
+onnxruntime==1.31.1
+rasterio==1.4.4
+shapely==2.2.0
+pyproj==3.7.2
