@@ -1,0 +1,17 @@
+# Frozen class list (single source for training and inference).
+# Names match the Agriculture-Vision 2021 label folders: <split>/labels/<name>/<key>.png
+# Other dataset labels (double_plant, endrow, planter_skip, storm_damage, water, waterway) are treated as background.
+# Copy this file unchanged to services/inference/models/classes.yaml.
+classes:
+  - id: 0
+    name: background
+    colour: transparent
+  - id: 1
+    name: nutrient_deficiency
+    colour: "#e6194b"
+  - id: 2
+    name: drydown
+    colour: "#f58231"
+  - id: 3
+    name: weed_cluster
+    colour: "#911eb4"

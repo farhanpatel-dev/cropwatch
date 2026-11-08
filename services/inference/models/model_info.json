@@ -1,0 +1,65 @@
+{
+  "name": "unet-resnet34",
+  "version": "3",
+  "mlflow_run_id": "6d9eee7ff25843c68a0d40682deaadd1",
+  "checkpoint_epoch": 4,
+  "input_channels": 3,
+  "tile_size": 256,
+  "classes": [
+    {
+      "id": 0,
+      "name": "background"
+    },
+    {
+      "id": 1,
+      "name": "nutrient_deficiency"
+    },
+    {
+      "id": 2,
+      "name": "drydown"
+    },
+    {
+      "id": 3,
+      "name": "weed_cluster"
+    }
+  ],
+  "input": {
+    "name": "image",
+    "shape": [
+      "N",
+      3,
+      256,
+      256
+    ],
+    "dtype": "float32"
+  },
+  "output": {
+    "name": "logits",
+    "shape": [
+      "N",
+      4,
+      256,
+      256
+    ],
+    "note": "argmax over axis 1"
+  },
+  "preprocessing": {
+    "steps": "rgb uint8 -> float / 255 -> (x - mean) / std per channel, HWC -> CHW",
+    "mean": [
+      0.436507322155216,
+      0.44438759050806137,
+      0.4423227516936164
+    ],
+    "std": [
+      0.1644568029880839,
+      0.15241448558307377,
+      0.15659861664273395
+    ]
+  },
+  "opset": 18,
+  "verified": {
+    "val_tiles": 32,
+    "max_abs_logit_diff": 2.8133392333984375e-05,
+    "argmax_agreement": 1.0
+  }
+}

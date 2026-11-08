@@ -6,7 +6,7 @@
 | MLflow run | `6d9eee7ff25843c68a0d40682deaadd1` (experiment `cropwatch-full-dataset`), best epoch 4 of 20 |
 | Date | 2026-11-08 |
 | Owner | Farhan (ML) |
-| Files | `model.onnx` (98 MB, opset 18), `model_info.json`, `classes.yaml` in `services/inference/models/`, written by `ml/scripts/export_onnx.py`. Not in Git |
+| Files | `model.onnx` (98 MB, opset 18), `model_info.json`, `classes.yaml` in `services/inference/models/`, written by `ml/scripts/export_onnx.py`. Committed in Git (98 MB) |
 
 ## What it does
 Semantic segmentation of RGB aerial farm images: every pixel gets one of four classes. The inference service turns the result into polygons with an area and a confidence, shown on a map.

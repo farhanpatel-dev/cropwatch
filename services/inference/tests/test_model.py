@@ -98,7 +98,7 @@ def test_load_model_info_reports_missing_field(tmp_path: Path) -> None:
         load_model_info(path)
 
 
-@pytest.mark.skipif(not HAS_MODEL, reason="model.onnx not present (not in Git)")
+@pytest.mark.skipif(not HAS_MODEL, reason="model.onnx not present")
 def test_real_model_matches_direct_onnx_on_one_tile() -> None:
     import onnxruntime as ort
 

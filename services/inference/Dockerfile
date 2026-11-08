@@ -2,7 +2,7 @@
 # Build from the repo root:  docker compose build inference
 # The model files (models/model.onnx, model_info.json, classes.yaml) are copied in, so they
 # must exist in services/inference/models/ before building (written by ml/scripts/export_onnx.py;
-# not in Git). Without them the container starts and exits with a clear error.
+# committed in Git). If they are missing, the container starts and exits with a clear error.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
