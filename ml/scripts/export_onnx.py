@@ -26,7 +26,7 @@ import onnxruntime as ort
 import yaml
 
 from cropwatch_ml.datasets import list_keys, read_rgb
-from cropwatch_ml.models.unet import UNet
+from cropwatch_ml.models import build_model
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -79,7 +79,11 @@ def main() -> None:
     tile = int(prep["tile_size"])
     classes = yaml.safe_load(args.classes.read_text())["classes"]
 
-    model = UNet(in_channels=3, num_classes=len(classes), base=int(params["base_channels"]))
+    model_name = params.get("model", "unet")
+    # Same network shape as in training; the checkpoint supplies all weights (no download).
+    model = build_model(
+        model_name, len(classes), int(params.get("base_channels", 32)), pretrained=False
+    )
     model.load_state_dict(torch.load(ckpt, map_location="cpu", weights_only=True))
     model.eval()  # batch norm uses its running statistics, no dropout
 
@@ -115,7 +119,7 @@ def main() -> None:
         raise SystemExit("ONNX output does not match PyTorch, not writing model_info.json")
 
     info = {
-        "name": "unet",
+        "name": model_name,
         "version": str(args.version),
         "mlflow_run_id": args.run_id,
         "checkpoint_epoch": summary["best_epoch"],
