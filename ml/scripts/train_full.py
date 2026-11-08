@@ -1,4 +1,7 @@
-"""Train the U-Net on the full Agriculture-Vision 2021 train split, score on the val split.
+"""Train a U-Net on the full Agriculture-Vision 2021 train split, score on the val split.
+
+--model unet           our own U-Net from scratch (run e9ed5ab1).
+--model unet-resnet34  U-Net with an ImageNet-pretrained ResNet34 encoder.
 
 The official split is by field (no field is in both train/ and val/), so we use it as is.
 - Train: one random 256 crop per image per epoch, flips and 90-degree rotations.
@@ -43,7 +46,7 @@ from cropwatch_ml.datasets import (
 )
 from cropwatch_ml.losses import CEDiceLoss
 from cropwatch_ml.metrics import confusion_matrix, iou_per_class, mean_iou
-from cropwatch_ml.models import UNet
+from cropwatch_ml.models import MODELS, build_model
 
 ML_DIR = Path(__file__).resolve().parents[1]
 
@@ -70,10 +73,11 @@ def sample_stats(
     return mean.tolist(), std.tolist(), (class_px / class_px.sum()).tolist()
 
 
-def class_weights_from(freq: list[float]) -> list[float]:
-    """1/sqrt(pixel share), scaled to average 1. Rare classes get bigger weights, but the
-    square root keeps a 1% class from getting 100x the weight of background."""
-    w = 1 / np.sqrt(np.maximum(freq, 1e-6))
+def class_weights_from(freq: list[float], power: float = 0.5) -> list[float]:
+    """1 / (pixel share ** power), scaled to average 1. Rare classes get bigger weights.
+    power 1 = full inverse frequency, 0.5 = 1/sqrt (keeps a 1% class from getting 100x the
+    weight of background), smaller = softer (fewer false alarms on background), 0 = equal."""
+    w = 1 / np.maximum(freq, 1e-6) ** power
     return (w / w.mean()).tolist()
 
 
@@ -145,9 +149,11 @@ def main() -> None:
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--weight-decay", type=float, default=0.0)
-    p.add_argument("--base-channels", type=int, default=32)
+    p.add_argument("--model", choices=MODELS, default="unet")
+    p.add_argument("--base-channels", type=int, default=32, help="own unet only")
     p.add_argument("--dice-weight", type=float, default=1.0, help="0 = cross-entropy only")
     p.add_argument("--class-weights", choices=["auto", "none"], default="auto")
+    p.add_argument("--class-weight-power", type=float, default=0.5, help="weight = 1/share**power")
     p.add_argument("--stats-images", type=int, default=2000, help="train images for mean/std")
     p.add_argument("--max-train-images", type=int, default=None, help="for short trials")
     p.add_argument("--val-images", type=int, default=2000, help="val images scored each epoch")
@@ -184,7 +190,10 @@ def main() -> None:
 
     t0 = time.time()
     mean, std, freq = sample_stats(args.train_dir, stats_keys, class_ids)
-    weights = class_weights_from(freq) if args.class_weights == "auto" else [1.0] * num_classes
+    if args.class_weights == "auto":
+        weights = class_weights_from(freq, args.class_weight_power)
+    else:
+        weights = [1.0] * num_classes
     print(f"stats from {len(stats_keys)} train images in {time.time() - t0:.0f}s")
     print(f"  mean {[round(m, 4) for m in mean]} std {[round(s, 4) for s in std]}")
     for n, f, w in zip(names, freq, weights, strict=True):
@@ -216,7 +225,7 @@ def main() -> None:
         flush=True,
     )
 
-    model = UNet(in_channels=3, num_classes=num_classes, base=args.base_channels).to(device)
+    model = build_model(args.model, num_classes, args.base_channels).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     loss_fn = CEDiceLoss(torch.tensor(weights, device=device), args.dice_weight)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -236,12 +245,12 @@ def main() -> None:
                 "val_images_total": len(all_val_keys),
                 "device": torch.cuda.get_device_name(0) if device == "cuda" else "cpu",
                 "torch": torch.__version__,
-                "model": "unet",
                 "params": n_params,
                 "tile_size": train_ds.tile,
                 "input_channels": 3,
                 "augment": "flips+rot90",
-                "loss": f"ce(weighted={args.class_weights})+{args.dice_weight}*dice",
+                "loss": f"ce(weighted={args.class_weights}, power={args.class_weight_power})"
+                f"+{args.dice_weight}*dice",
                 "norm_mean": json.dumps([round(m, 4) for m in mean]),
                 "norm_std": json.dumps([round(s, 4) for s in std]),
                 "class_weights": json.dumps([round(w, 3) for w in weights]),
@@ -356,6 +365,7 @@ def main() -> None:
             "scored_on": scored_on,
             "iou": dict(zip(names, iou_per_class(final_cm), strict=True)),
             "baseline_iou": dict(zip(names, iou_per_class(baseline_cm(final_cm)), strict=True)),
+            "model": args.model,
             "preprocessing": {"mean": mean, "std": std, "tile_size": train_ds.tile},
             "class_weights": dict(zip(names, weights, strict=True)),
         }
