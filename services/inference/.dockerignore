@@ -1,0 +1,9 @@
+# Keep the build context small: only app/, models/ and requirements.txt are needed.
+.venv/
+tests/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+requirements-dev.txt
+pyproject.toml
+models/.gitkeep
