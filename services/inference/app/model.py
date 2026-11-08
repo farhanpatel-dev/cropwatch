@@ -92,28 +92,39 @@ class Segmenter:
                   for large images and is precise enough for per-polygon means.
     """
 
-    def __init__(self, info: ModelInfo, session: Session, batch_size: int = 8) -> None:
+    def __init__(
+        self, info: ModelInfo, session: Session, batch_size: int = 16, overlap: int = OVERLAP
+    ) -> None:
         self.info = info
         self.session = session
         self.batch_size = batch_size
+        self.overlap = overlap
 
     @classmethod
-    def from_dir(cls, model_dir: str | Path, batch_size: int = 8) -> "Segmenter":
+    def from_paths(
+        cls,
+        model_path: str | Path,
+        info_path: str | Path,
+        batch_size: int = 16,
+        overlap: int = OVERLAP,
+    ) -> "Segmenter":
         import onnxruntime as ort  # imported here so tests with a fake session do not need it
 
+        info = load_model_info(info_path)
+        session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+        return cls(info, session, batch_size, overlap)
+
+    @classmethod
+    def from_dir(cls, model_dir: str | Path, batch_size: int = 16) -> "Segmenter":
         model_dir = Path(model_dir)
-        info = load_model_info(model_dir / "model_info.json")
-        session = ort.InferenceSession(
-            str(model_dir / "model.onnx"), providers=["CPUExecutionProvider"]
-        )
-        return cls(info, session, batch_size)
+        return cls.from_paths(model_dir / "model.onnx", model_dir / "model_info.json", batch_size)
 
     def predict(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if image.ndim != 3 or image.shape[2] != 3 or image.dtype != np.uint8:
             raise ValueError(f"expected H x W x 3 uint8 RGB, got {image.shape} {image.dtype}")
         h, w = image.shape[:2]
         t = self.info.tile_size
-        plan = plan_tiles(h, w, t, OVERLAP)
+        plan = plan_tiles(h, w, t, self.overlap)
         classes = np.zeros((h, w), np.uint8)
         confidence = np.zeros((h, w), np.float16)
         crops = iter_tiles(image, plan, t)
