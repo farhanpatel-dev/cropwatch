@@ -144,6 +144,20 @@ def compute_mean_std(split_dir: str | Path, keys: Sequence[str]) -> tuple[list[f
     return mean.tolist(), std.tolist()
 
 
+def jitter_colour(image: torch.Tensor, strength: float) -> torch.Tensor:
+    """Random brightness, contrast and saturation change of a 3xHxW image in 0-1."""
+
+    def factor() -> float:
+        return random.uniform(1 - strength, 1 + strength)
+
+    image = image * factor()  # brightness
+    mean = image.mean()
+    image = (image - mean) * factor() + mean  # contrast: stretch around the average
+    grey = image.mean(0, keepdim=True)
+    image = (image - grey) * factor() + grey  # saturation: move away from / toward grey
+    return image.clamp(0.0, 1.0)
+
+
 class AgriVisionDataset(Dataset):
     """(image, target) pairs as tensors: image float32 3xTxT, target int64 TxT.
 
@@ -151,6 +165,9 @@ class AgriVisionDataset(Dataset):
     mode="val":   every non-overlapping TxT tile of every image (fixed, so runs are comparable).
     cache=True:   read every image and target once and keep them in memory (fast epochs).
     augment=True: random horizontal/vertical flips and 90-degree rotations (train mode only).
+    colour_jitter=j: with augment, scale brightness, contrast and saturation each by a random
+                  factor in [1-j, 1+j] (0 = off). The target is unchanged: colour does not move
+                  pixels, it only makes the model rely less on the exact colours of train fields.
     """
 
     def __init__(
@@ -165,6 +182,7 @@ class AgriVisionDataset(Dataset):
         std: Sequence[float] | None = None,
         cache: bool = False,
         augment: bool = False,
+        colour_jitter: float = 0.0,
     ) -> None:
         if mode not in ("train", "val"):
             raise ValueError("mode must be 'train' or 'val'")
@@ -180,6 +198,7 @@ class AgriVisionDataset(Dataset):
         self.mean = torch.tensor(mean or [0.0, 0.0, 0.0]).view(3, 1, 1)
         self.std = torch.tensor(std or [1.0, 1.0, 1.0]).view(3, 1, 1)
         self.augment = augment and mode == "train"
+        self.colour_jitter = colour_jitter if self.augment else 0.0
         self._cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         if cache:
             for key in self.keys:
@@ -222,6 +241,8 @@ class AgriVisionDataset(Dataset):
             k = random.randint(0, 3)
             rgb, target = np.rot90(rgb, k), np.rot90(target, k)
         image = torch.from_numpy(rgb.copy()).permute(2, 0, 1).float() / 255.0
+        if self.colour_jitter:
+            image = jitter_colour(image, self.colour_jitter)
         image = (image - self.mean) / self.std
         return image, torch.from_numpy(
             target.astype(np.int64)
