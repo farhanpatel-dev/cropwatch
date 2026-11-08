@@ -149,6 +149,15 @@ def main() -> None:
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--weight-decay", type=float, default=0.0)
+    p.add_argument(
+        "--encoder-lr-scale",
+        type=float,
+        default=1.0,
+        help="pretrained encoder lr = lr * this (e.g. 0.1); the decoder keeps lr",
+    )
+    p.add_argument(
+        "--colour-jitter", type=float, default=0.0, help="brightness/contrast/saturation +-j"
+    )
     p.add_argument("--model", choices=MODELS, default="unet")
     p.add_argument("--base-channels", type=int, default=32, help="own unet only")
     p.add_argument("--dice-weight", type=float, default=1.0, help="0 = cross-entropy only")
@@ -200,7 +209,14 @@ def main() -> None:
         print(f"  {n:22s} {100 * f:6.2f}% of valid px, loss weight {w:.2f}")
 
     common = dict(classes_path=args.classes, mean=mean, std=std)
-    train_ds = AgriVisionDataset(args.train_dir, train_keys, mode="train", augment=True, **common)
+    train_ds = AgriVisionDataset(
+        args.train_dir,
+        train_keys,
+        mode="train",
+        augment=True,
+        colour_jitter=args.colour_jitter,
+        **common,
+    )
     val_ds = AgriVisionDataset(args.val_dir, val_keys, mode="val", **common)
 
     # On Windows every worker process loads PyTorch's CUDA libraries again and reserves about
@@ -228,7 +244,16 @@ def main() -> None:
     model = build_model(args.model, num_classes, args.base_channels).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     loss_fn = CEDiceLoss(torch.tensor(weights, device=device), args.dice_weight)
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # Pretrained encoder: smaller steps, so its ImageNet features are tuned, not overwritten.
+    # Group 0 (decoder and head) keeps the full lr; that is the lr we log.
+    encoder = getattr(model, "encoder", None)
+    if args.encoder_lr_scale != 1.0 and encoder is None:
+        raise SystemExit(f"--encoder-lr-scale needs a model with an encoder, not {args.model}")
+    enc_ids = {id(p) for p in encoder.parameters()} if encoder is not None else set()
+    groups = [{"params": [p for p in model.parameters() if id(p) not in enc_ids]}]
+    if enc_ids:
+        groups.append({"params": list(encoder.parameters()), "lr": args.lr * args.encoder_lr_scale})
+    opt = torch.optim.AdamW(groups, lr=args.lr, weight_decay=args.weight_decay)
     # Cosine over every step (not every epoch), so the lr falls smoothly even with few epochs.
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs * steps_per_epoch)
 
@@ -248,7 +273,8 @@ def main() -> None:
                 "params": n_params,
                 "tile_size": train_ds.tile,
                 "input_channels": 3,
-                "augment": "flips+rot90",
+                "augment": "flips+rot90"
+                + (f"+colour{args.colour_jitter}" if args.colour_jitter else ""),
                 "loss": f"ce(weighted={args.class_weights}, power={args.class_weight_power})"
                 f"+{args.dice_weight}*dice",
                 "norm_mean": json.dumps([round(m, 4) for m in mean]),
