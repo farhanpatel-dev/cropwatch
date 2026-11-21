@@ -53,6 +53,8 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 | Cloud | Azure training lab only | No cost goal | AWS/GCP/Azure with IaC |
 
 ## Hosting decision
+Superseded on 2026-11-20 by ADR 0004: the whole stack runs on Azure free tiers (Static Web Apps, Container Apps, PostgreSQL Flexible Server B1MS). The notes below are the original plan.
+
 - Frontend: Vercel Hobby plan (free; personal, non-commercial use only; re-check Vercel's terms and limits before relying on them). Use Vercel's GitHub integration and set `VITE_API_URL` in the Vercel project settings.
 - Backend: not hosted on Vercel (Vercel runs short-lived serverless functions, not long-running containers with ONNX Runtime and rasterio). Default: recorded demo of the local stack; a free backend host is optional (cut order item 2).
 
