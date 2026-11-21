@@ -87,6 +87,24 @@ export default function App() {
           </div>
         </header>
 
+        <details className="intro" open={!current}>
+          <summary>How it works</summary>
+          <ol>
+            <li>
+              <strong>Give it a photo</strong> of a field taken from above (drone or plane), or
+              click one of the sample fields below.
+            </li>
+            <li>
+              <strong>An AI model checks every pixel</strong> and decides whether it looks
+              healthy or shows one of three problems: nutrient deficiency, drydown or weeds.
+            </li>
+            <li>
+              <strong>The result appears on the map:</strong> your photo is placed where the field
+              is, and coloured outlines mark the problem areas. Click an outline for details.
+            </li>
+          </ol>
+        </details>
+
         {apiDown && (
           <div className="notice">
             The analysis backend is offline right now. You can still look around; uploads will
@@ -113,6 +131,12 @@ export default function App() {
       </aside>
       <main className="map-wrap">
         <MapView current={current} classes={classes} mapRef={mapRef} />
+        {!current && !busy && (
+          <div className="map-hint">
+            Nothing analysed yet. Click a <strong>sample field</strong> on the left to see an
+            example result here.
+          </div>
+        )}
         {busy && (
           <div className="busy" role="status">
             <span className="spinner" aria-hidden="true" />

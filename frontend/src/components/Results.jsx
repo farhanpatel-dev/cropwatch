@@ -1,3 +1,4 @@
+import { CLASS_INFO, label } from "../classInfo.js";
 import { formatArea } from "../geo.js";
 
 export default function Results({ analysis, classes }) {
@@ -13,18 +14,20 @@ export default function Results({ analysis, classes }) {
         {analysis.model.version}
       </p>
       {analysis.stats.length === 0 ? (
-        <p className="ok">No crop stress found in this image.</p>
+        <p className="ok">No crop stress found: the whole image looks healthy to the model.</p>
       ) : (
         <p className="summary">
-          <strong>{formatArea(total)}</strong> flagged as stressed
+          The model marked <strong>{formatArea(total)}</strong> of this field as possibly stressed.
+          On the map, each coloured outline is one problem area; click it to see its size and how
+          sure the model is.
         </p>
       )}
       <table className="stats">
         <thead>
           <tr>
-            <th>Class</th>
-            <th>Patches</th>
-            <th>Area</th>
+            <th>Problem</th>
+            <th title="Number of separate outlined areas">Areas found</th>
+            <th>Total size</th>
           </tr>
         </thead>
         <tbody>
@@ -32,9 +35,10 @@ export default function Results({ analysis, classes }) {
             const s = byId[c.id];
             return (
               <tr key={c.id} className={s ? "" : "muted"}>
-                <td>
+                <td title={CLASS_INFO[c.name]?.what}>
                   <i className="swatch" style={{ background: c.colour }} />
-                  {c.name.replace(/_/g, " ")}
+                  {label(c.name)}
+                  <small className="what">{CLASS_INFO[c.name]?.what}</small>
                 </td>
                 <td>{s ? s.polygon_count : 0}</td>
                 <td>{s ? formatArea(s.area_ha) : "–"}</td>
