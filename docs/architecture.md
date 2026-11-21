@@ -31,7 +31,7 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 ## Rules
 - Services communicate only via HTTP/JSON per 03-api-contract. No shared code imports.
 - Only geo connects to PostGIS.
-- Every service exposes GET /health and logs a request id.
+- Every service exposes GET /health and logs a request id. The id travels in the `X-Request-ID` header: the gateway creates one (or reuses the browser's), sends it to inference and geo, and returns it on every response.
 - Config only from environment variables (.env.example). No secrets in Git.
 - Model hand-off: `model.onnx` + `classes.yaml` (id, name, colour). Inference reports model name/version from `model_info.json` next to the file.
 
@@ -74,6 +74,7 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 POSTGRES_USER=cropwatch
 POSTGRES_PASSWORD=change_me_locally
 POSTGRES_DB=cropwatch
+POSTGIS_HOST_PORT=5432
 DATABASE_URL=postgresql+psycopg://cropwatch:change_me_locally@postgis:5432/cropwatch
 INFERENCE_URL=http://inference:8001
 GEO_URL=http://geo:8002
@@ -82,6 +83,7 @@ MODEL_INFO_PATH=/app/models/model_info.json
 TILE_SIZE=256
 TILE_OVERLAP=32
 MAX_UPLOAD_MB=50
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 MLFLOW_TRACKING_URI=http://mlflow:5000
 VITE_API_URL=http://localhost:8000
 ```

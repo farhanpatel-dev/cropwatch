@@ -1,5 +1,24 @@
 # cropwatch
-Geospatial crop-health monitoring platform. A PyTorch U-Net segments crop-stress regions in aerial and satellite imagery, served through a FastAPI service that returns georeferenced polygons stored in PostGIS. Dockerized, tracked with MLflow, CI/CD via GitHub Actions, deployed on Azure.
+Crop-health monitoring from aerial farm images. Upload an RGB aerial image and CropWatch marks nutrient deficiency, drydown and weed clusters as polygons on a map, with the area per class. A U-Net (PyTorch, served with ONNX Runtime) finds the stressed pixels; a FastAPI gateway, an inference service and a geo service store the polygons in PostGIS; a React + Leaflet frontend shows them. Runs locally with Docker Compose; tested on aerial images only (not satellite).
+
+## Run the whole stack
+Needs Docker (Docker Desktop, or the free Colima on macOS: `brew install colima docker docker-compose && colima start --cpu 6 --memory 5`).
+```bash
+cp .env.example .env            # then set POSTGIS_HOST_PORT=55432 if a local PostgreSQL already uses 5432
+docker compose up -d --build postgis inference geo gateway frontend
+docker compose ps               # all should show (healthy)
+```
+Open http://localhost:3000 and click a sample field, or upload your own image. API docs: http://localhost:8000/docs.
+
+| Service | Port | Folder |
+| --- | --- | --- |
+| frontend (React + Vite + react-leaflet, nginx) | 3000 (dev server 5173) | `frontend/` |
+| gateway (public API) | 8000 | `services/gateway/` |
+| inference (ONNX Runtime) | 8001 | `services/inference/` |
+| geo (only service using the database) | 8002 | `services/geo/` |
+| PostGIS | `POSTGIS_HOST_PORT` (5432) | `infra/docker/postgis/` |
+
+Frontend development: `cd frontend && npm ci && npm run dev` (uses `VITE_API_URL`, default http://localhost:8000). Each Python service has its own venv and tests: `python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest -q` inside its folder. The geo database tests need `TEST_DATABASE_URL` (see `services/geo/tests/conftest.py`).
 
 ## Machine learning and inference
 

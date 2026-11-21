@@ -38,14 +38,14 @@ Response 201:
   "name": "north-field",
   "status": "completed",
   "created_at": "2026-11-04T17:20:00Z",
-  "model": {"name": "unet", "version": "3"},
+  "model": {"name": "unet-resnet34", "version": "3"},
   "image_bounds": {"type": "Polygon", "coordinates": [[[-123.2, 49.1], [-123.1, 49.1], [-123.1, 49.2], [-123.2, 49.2], [-123.2, 49.1]]]},
   "stats": [
     {"class_id": 1, "class_name": "nutrient_deficiency", "polygon_count": 12, "area_ha": 3.42}
   ]
 }
 ```
-Errors: 400 bad file type or bounds; 413 file too large; 422 validation; 502 upstream service error; 504 inference timeout.
+Errors: 400 bad file type or bounds; 413 file too large; 422 validation; 502 upstream service error; 504 inference timeout. Inference 400/413 (bad image, larger than 6000 px) are passed on with inference's `detail`. The gateway allows browser calls (CORS) from the origins in `CORS_ORIGINS`.
 
 ### Polygon feature (used everywhere)
 ```json
@@ -61,7 +61,7 @@ Responses that return polygons use `{"type": "FeatureCollection", "features": [ 
 | Method and path | Purpose |
 | --- | --- |
 | GET /health | liveness |
-| GET /model-info | `{"name":"unet","version":"3","mlflow_run_id":"...","input_channels":3,"tile_size":256,"classes":[{"id":0,"name":"background"}, ...]}` |
+| GET /model-info | `{"name":"unet-resnet34","version":"3","mlflow_run_id":"...","input_channels":3,"tile_size":256,"classes":[{"id":0,"name":"background"}, ...]}` |
 | POST /predict | multipart `file`, optional `bounds`. Response 200: `{"model":{"name","version"},"image":{"width","height","crs":"EPSG:4326","bounds":[minLon,minLat,maxLon,maxLat]},"polygons":FeatureCollection}` |
 
 Rules: the model takes 3 channels (RGB). For GeoTIFFs with more bands, bands 1 to 3 are used as RGB and the rest are ignored; images with fewer than 3 bands or not 8-bit (uint8) are rejected with 400. Pixel size must not exceed 6000x6000 in the MVP (reject larger with 413; lowered from 8000 on 2026-11-08 because a 6000x6000 image already takes about 41 s on a laptop CPU and the gateway timeout is 60 s); drop polygons smaller than 20 pixels; simplify tolerance of about 1 pixel; `confidence` is the mean softmax probability of the class inside the polygon.
