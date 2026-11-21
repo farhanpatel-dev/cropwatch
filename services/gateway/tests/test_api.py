@@ -222,3 +222,77 @@ def test_cors_preflight():
             headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"},
         )
     assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+class FakeUploads:
+    """Stands in for S3Uploads: one known upload of 1234 bytes."""
+
+    KEY = "uploads/" + "a" * 32 + ".jpg"
+
+    def new_upload(self, ext, max_bytes):
+        return {"upload_key": "uploads/" + "b" * 32 + ext, "url": "https://s3/x", "fields": {}}
+
+    def size(self, key):
+        return 1234 if key == self.KEY else None
+
+    def download_url(self, key):
+        return f"https://bucket.s3.amazonaws.com/{key}?sig=1"
+
+
+def aws_client(fake: Fake) -> TestClient:
+    settings = Settings("http://inference:8001", "http://geo:8002", 50, [])
+    return TestClient(create_app(settings, httpx.MockTransport(fake), uploads=FakeUploads()))
+
+
+def test_uploads_disabled_locally():
+    with make_client(Fake()) as c:
+        assert c.post("/api/v1/uploads", json={"filename": "f.jpg"}).status_code == 501
+
+
+def test_upload_slot_checks_type_and_size():
+    with aws_client(Fake()) as c:
+        ok = c.post("/api/v1/uploads", json={"filename": "Field.JPG", "size": 10})
+        assert ok.status_code == 201 and ok.json()["upload_key"].endswith(".jpg")
+        assert c.post("/api/v1/uploads", json={"filename": "f.exe"}).status_code == 400
+        big = c.post("/api/v1/uploads", json={"filename": "f.jpg", "size": 51 * 1024 * 1024})
+        assert big.status_code == 413
+
+
+def test_analysis_from_upload_key_sends_url_to_inference():
+    fake = Fake()
+    with aws_client(fake) as c:
+        r = c.post(
+            "/api/v1/analyses",
+            data={"upload_key": FakeUploads.KEY, "filename": "north.jpg", "bounds": "0,0,1,1"},
+        )
+    assert r.status_code == 201, r.text
+    sent = fake.calls[0].content.decode()
+    assert "image_url=https%3A%2F%2Fbucket.s3.amazonaws.com%2Fuploads%2F" in sent
+    assert json.loads(fake.calls[1].content)["source_filename"] == "north.jpg"
+
+
+@pytest.mark.parametrize("key", ["uploads/" + "c" * 32 + ".jpg", "../etc/passwd", "uploads/x.jpg"])
+def test_unknown_or_bad_upload_key_400(key):
+    fake = Fake()
+    with aws_client(fake) as c:
+        r = c.post("/api/v1/analyses", data={"upload_key": key, "bounds": "0,0,1,1"})
+    assert r.status_code == 400 and fake.calls == []
+
+
+def test_sigv4_signs_calls(monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+    fake = Fake()
+    settings = Settings(
+        "https://inf.lambda-url.ca-central-1.on.aws",
+        "https://geo.lambda-url.ca-central-1.on.aws",
+        50,
+        [],
+        aws_region="ca-central-1",
+        sign_requests=True,
+    )
+    with TestClient(create_app(settings, httpx.MockTransport(fake))) as c:
+        c.get("/api/v1/model-info")
+    auth = fake.calls[0].headers["Authorization"]
+    assert auth.startswith("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/")
+    assert "/ca-central-1/lambda/aws4_request" in auth

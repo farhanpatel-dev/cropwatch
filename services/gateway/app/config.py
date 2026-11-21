@@ -23,6 +23,10 @@ class Settings:
     max_upload_mb: int
     cors_origins: list[str]
     inference_timeout_s: float = INFERENCE_TIMEOUT_S
+    # AWS hosting only (ADR 0004). Empty / false locally.
+    upload_bucket: str = ""
+    aws_region: str | None = None
+    sign_requests: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -32,4 +36,7 @@ class Settings:
             geo_url=os.environ.get("GEO_URL", "http://geo:8002").rstrip("/"),
             max_upload_mb=int(os.environ.get("MAX_UPLOAD_MB", "50")),
             cors_origins=[o.strip() for o in origins.split(",") if o.strip()],
+            upload_bucket=os.environ.get("UPLOAD_BUCKET", ""),
+            aws_region=os.environ.get("AWS_REGION"),
+            sign_requests=os.environ.get("SIGN_REQUESTS", "").lower() in ("1", "true", "yes"),
         )
