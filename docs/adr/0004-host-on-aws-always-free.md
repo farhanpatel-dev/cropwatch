@@ -14,7 +14,7 @@ AWS for students in November 2026: AWS Educate gives no credits since 2023; Stud
 | --- | --- | --- |
 | frontend | S3 (private) + CloudFront | built with `VITE_API_URL` = gateway URL |
 | gateway | Lambda (container image, arm64), public function URL | 512 MB, 100 s timeout |
-| inference | Lambda (container image, arm64), function URL with IAM auth | 10,240 MB (6 vCPU), 90 s |
+| inference | Lambda (container image, arm64), function URL with IAM auth | 3,008 MB (new-account cap), 130 s |
 | geo | Lambda (container image, arm64), function URL with IAM auth | 512 MB; migrations run by deploy.sh |
 | uploads | S3 bucket, objects deleted after 1 day | browser uploads with a presigned POST |
 | database | Neon free plan (PostgreSQL with PostGIS), outside AWS | no always-free PostgreSQL on AWS |
@@ -33,9 +33,9 @@ Everything is in `infra/aws/template.yaml` (CloudFormation) and `infra/aws/deplo
 - **DynamoDB (always free) instead of PostGIS.** No spatial queries; geo would be rewritten.
 
 ## Consequences
-- Good: a public HTTPS site that sleeps when unused. Within the always-free Lambda and CloudFront allowances; a 4000 px analysis uses about 300 GB-seconds at 10 GB (estimate), so roughly 1,300 large or tens of thousands of small analyses per month.
+- Good: a public HTTPS site that sleeps when unused. Within the always-free Lambda and CloudFront allowances; a 4000 px analysis took 87 s at 3 GB, about 260 GB-seconds, so roughly 1,500 large or tens of thousands of small analyses per month fit in the 400,000 GB-second allowance.
 - Not quite zero: ECR storage (about 0.10 USD per GB-month) and S3 requests cost cents per month, paid from credits first. Neon's free plan has its own limits (storage, compute hours).
 - A card is required to open the AWS account. Set a budget alert (AWS Budgets) on day one.
 - Cold start: after a quiet period the first request starts the containers (estimate: several seconds, plus Neon waking up). The frontend calls `GET /api/v1/model-info` on page load to wake inference early.
-- Speed: 10,240 MB gives 6 vCPU, about the CPU of the M2 measurement in ADR 0003; re-measure 4000 px on Lambda. New AWS accounts may be capped at 3,008 MB per function until the quota is raised; then lower the hosted image limit.
+- Speed (measured 2026-11-21, us-east-2, 3,008 MB, end to end through S3): 512 px samples about 3 s warm, 13.5 s on a cold start; 2500 px 38 s; 4000 px 87 s. New accounts are capped at 3,008 MB per function, so the gateway waits 120 s on AWS (`INFERENCE_TIMEOUT_S`) instead of 60 s. With 10,240 MB (6 vCPU) 4000 px should drop to roughly 30 s (estimate).
 - The Agriculture-Vision terms are non-commercial; a free public demo fits them.
