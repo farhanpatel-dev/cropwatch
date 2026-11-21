@@ -2,7 +2,7 @@
 
 One-time setup:
 1. AWS account (card needed), then in the console: Billing -> Budgets -> create a 1 USD budget alert.
-2. `brew install awscli`, then `aws login` (or `aws configure` with an access key). Region: ca-central-1.
+2. `brew install awscli`, then `aws login` (or `aws configure` with an access key). Region: us-east-2 (same region as the Neon database; new free-plan accounts are locked to the region chosen at sign-up).
 3. Neon (https://neon.tech, free plan): create a project, run `CREATE EXTENSION postgis;` in its SQL
    editor, and copy the connection string. Change `postgresql://` to `postgresql+psycopg://`.
 

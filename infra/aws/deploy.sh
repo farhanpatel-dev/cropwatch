@@ -14,7 +14,7 @@ if [ -z "${CW_DATABASE_URL:-}" ] && [ -f .env ]; then
   CW_DATABASE_URL=$(grep -E '^CW_DATABASE_URL=' .env | tail -1 | cut -d= -f2- || true)
 fi
 : "${CW_DATABASE_URL:?set CW_DATABASE_URL to the Neon connection string (postgresql+psycopg://...)}"
-REGION=${AWS_REGION:-${CW_REGION:-ca-central-1}}
+REGION=${AWS_REGION:-${CW_REGION:-us-east-2}}
 STACK=${CW_STACK:-cropwatch}
 TAG=$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- services || echo "-dirty")
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
