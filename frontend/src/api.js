@@ -19,6 +19,7 @@ async function request(path, options) {
 
 export const apiBase = BASE;
 export const getClasses = () => request("/api/v1/classes");
+export const getModelInfo = () => request("/api/v1/model-info");
 export const listAnalyses = () => request("/api/v1/analyses?limit=50");
 export const getAnalysis = (id) => request(`/api/v1/analyses/${id}`);
 export const getPolygons = (id) => request(`/api/v1/analyses/${id}/polygons`);

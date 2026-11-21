@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createAnalysis, getAnalysis, getClasses, getPolygons, listAnalyses } from "./api.js";
+import {
+  createAnalysis,
+  getAnalysis,
+  getClasses,
+  getModelInfo,
+  getPolygons,
+  listAnalyses,
+} from "./api.js";
 import History from "./components/History.jsx";
 import MapView from "./components/MapView.jsx";
 import Results from "./components/Results.jsx";
@@ -36,6 +43,8 @@ export default function App() {
     getClasses()
       .then(setClasses)
       .catch(() => {});
+    // Wakes the model service early when the backend has been asleep (cloud hosting).
+    getModelInfo().catch(() => {});
     refreshHistory();
   }, [refreshHistory]);
 

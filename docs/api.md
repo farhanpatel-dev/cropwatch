@@ -18,6 +18,7 @@ Defined once in `ml/configs/classes.yaml` and copied to `services/inference/mode
 | --- | --- |
 | GET /health | `{"status":"ok"}` |
 | GET /api/v1/classes | List of classes above |
+| GET /api/v1/model-info | Inference's `/model-info` passed through (502 if inference is down). The frontend calls it on page load, which also wakes inference on hosts that scale to zero |
 | POST /api/v1/analyses | Upload and analyse an image |
 | GET /api/v1/analyses | List analyses, newest first |
 | GET /api/v1/analyses/{id} | One analysis with stats |

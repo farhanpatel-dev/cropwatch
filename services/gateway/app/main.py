@@ -3,6 +3,7 @@
 Endpoints (docs/api.md, "Gateway (public)"), request flow in docs/architecture.md:
   GET  /health
   GET  /api/v1/classes
+  GET  /api/v1/model-info              inference's /model-info (also wakes a sleeping inference)
   POST /api/v1/analyses                 upload -> inference /predict -> geo -> 201
   GET  /api/v1/analyses, /api/v1/analyses/{id}, /api/v1/analyses/{id}/polygons
   GET  /api/v1/polygons?bbox=&class_id=&analysis_id=&limit=
@@ -147,6 +148,23 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     @app.get("/api/v1/classes")
     def classes() -> list[dict]:
         return CLASSES
+
+    @app.get("/api/v1/model-info")
+    async def model_info(request: Request) -> dict:
+        """Which model is serving. The frontend calls this on page load, so on a host that
+        scales to zero, inference starts waking up while the user picks an image."""
+        client: httpx.AsyncClient = request.app.state.http
+        try:
+            r = await client.get(
+                f"{settings.inference_url}/model-info",
+                headers={REQUEST_ID_HEADER: request.state.request_id},
+                timeout=settings.inference_timeout_s,
+            )
+        except httpx.HTTPError as e:
+            raise HTTPException(502, "inference service unreachable") from e
+        if r.status_code != 200:
+            raise HTTPException(502, f"inference service error ({r.status_code})")
+        return r.json()
 
     @app.post("/api/v1/analyses", status_code=201)
     async def create_analysis(

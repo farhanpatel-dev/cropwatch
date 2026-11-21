@@ -57,6 +57,8 @@ class Fake:
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
         path = req.url.path
+        if req.url.host == "inference" and path == "/model-info":
+            return httpx.Response(200, json={"name": "unet-resnet34", "version": "3"})
         if req.url.host == "inference":
             return self.inference(req)
         if path == "/analyses" and req.method == "POST":
@@ -92,6 +94,11 @@ def test_health_and_classes():
     with make_client(Fake()) as c:
         assert c.get("/health").json() == {"status": "ok"}
         assert [k["name"] for k in c.get("/api/v1/classes").json()][1] == "nutrient_deficiency"
+
+
+def test_model_info_proxies_inference():
+    with make_client(Fake()) as c:
+        assert c.get("/api/v1/model-info").json()["name"] == "unet-resnet34"
 
 
 def test_upload_happy_path():
