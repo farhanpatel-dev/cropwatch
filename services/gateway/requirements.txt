@@ -1,0 +1,5 @@
+# Runtime dependencies of the gateway (also used by the Docker image).
+fastapi==0.165.0
+uvicorn==0.54.0
+python-multipart==0.0.34
+httpx==0.28.1
