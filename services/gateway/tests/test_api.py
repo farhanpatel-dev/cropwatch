@@ -296,3 +296,10 @@ def test_sigv4_signs_calls(monkeypatch):
     auth = fake.calls[0].headers["Authorization"]
     assert auth.startswith("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/")
     assert "/ca-central-1/lambda/aws4_request" in auth
+
+
+def test_inference_timeout_from_env(monkeypatch):
+    monkeypatch.delenv("INFERENCE_TIMEOUT_S", raising=False)
+    assert Settings.from_env().inference_timeout_s == 60.0
+    monkeypatch.setenv("INFERENCE_TIMEOUT_S", "120")
+    assert Settings.from_env().inference_timeout_s == 120.0

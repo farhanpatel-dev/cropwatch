@@ -17,8 +17,8 @@ Parameters:
     Description: postgresql+psycopg://...?sslmode=require (Neon)
   InferenceMemoryMb:
     Type: Number
-    Default: 10240
-    Description: More memory also gives more CPU (10240 MB = 6 vCPU). New accounts may be capped at 3008.
+    Default: 3008
+    Description: More memory also gives more CPU (10240 MB = 6 vCPU). New accounts are capped at 3008 until a quota increase.
 
 Resources:
   # ---------- storage ----------
@@ -157,7 +157,7 @@ Resources:
       Code: { ImageUri: !Ref InferenceImageUri }
       Architectures: [arm64]
       MemorySize: !Ref InferenceMemoryMb
-      Timeout: 90
+      Timeout: 130
       Role: !GetAtt InferenceRole.Arn
       Environment:
         Variables:
@@ -186,7 +186,7 @@ Resources:
       Code: { ImageUri: !Ref GatewayImageUri }
       Architectures: [arm64]
       MemorySize: 512
-      Timeout: 100
+      Timeout: 150
       Role: !GetAtt GatewayRole.Arn
       Environment:
         Variables:
@@ -195,6 +195,8 @@ Resources:
           UPLOAD_BUCKET: !Ref UploadBucket
           SIGN_REQUESTS: "true"
           MAX_UPLOAD_MB: "50"
+          # 3008 MB Lambda: 2500 px took 38 s, 4000 px over 60 s (measured 2026-11-21).
+          INFERENCE_TIMEOUT_S: "120"
           CORS_ORIGINS: !Sub "https://${Distribution.DomainName},http://localhost:5173"
 
   InferenceUrl:

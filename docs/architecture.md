@@ -16,7 +16,7 @@ Copy of project file 02. Changes agreed on 2026-11-04: training runs on a local 
 ## Request flow (POST /api/v1/analyses)
 1. Browser sends multipart file (and bounds if needed) to the gateway.
 2. Gateway validates type, size (max 50 MB) and bounds; keeps the file in memory or a temp path.
-3. Gateway calls inference `POST /predict` (timeout 60 s).
+3. Gateway calls inference `POST /predict` (timeout `INFERENCE_TIMEOUT_S`, 60 s by default, 120 s on AWS).
 4. Inference reads the image, normalises, cuts overlapping 256x256 tiles, runs the ONNX model, stitches the class mask, polygonizes with rasterio, simplifies, drops tiny shapes, reprojects to EPSG:4326, computes area and returns a GeoJSON FeatureCollection.
 5. Gateway calls geo `POST /analyses`, then `POST /analyses/{id}/polygons`, then `GET /stats?analysis_id=`.
 6. Gateway returns 201 with analysis id, model info, image bounds and stats.
@@ -85,6 +85,7 @@ MODEL_INFO_PATH=/app/models/model_info.json
 TILE_SIZE=256
 TILE_OVERLAP=32
 MAX_UPLOAD_MB=50
+INFERENCE_TIMEOUT_S=60
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 MLFLOW_TRACKING_URI=http://mlflow:5000
 VITE_API_URL=http://localhost:8000

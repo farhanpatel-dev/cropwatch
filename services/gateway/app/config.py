@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass
 
-# docs/api.md: the gateway waits at most 60 s for inference, then returns 504.
+# docs/api.md: the gateway waits at most 60 s for inference (INFERENCE_TIMEOUT_S), then 504.
 INFERENCE_TIMEOUT_S = 60.0
 
 # Frozen class list (docs/api.md "Classes", ml/configs/classes.yaml). Services never import
@@ -35,6 +35,7 @@ class Settings:
             inference_url=os.environ.get("INFERENCE_URL", "http://inference:8001").rstrip("/"),
             geo_url=os.environ.get("GEO_URL", "http://geo:8002").rstrip("/"),
             max_upload_mb=int(os.environ.get("MAX_UPLOAD_MB", "50")),
+            inference_timeout_s=float(os.environ.get("INFERENCE_TIMEOUT_S") or INFERENCE_TIMEOUT_S),
             cors_origins=[o.strip() for o in origins.split(",") if o.strip()],
             upload_bucket=os.environ.get("UPLOAD_BUCKET", ""),
             aws_region=os.environ.get("AWS_REGION"),

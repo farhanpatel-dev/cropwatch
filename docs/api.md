@@ -48,7 +48,7 @@ Response 201:
   ]
 }
 ```
-Errors: 400 bad file type or bounds; 413 file too large; 422 validation; 502 upstream service error; 504 inference timeout. Inference 400/413 (bad image, larger than 4000 px) are passed on with inference's `detail`. The gateway allows browser calls (CORS) from the origins in `CORS_ORIGINS`.
+Errors: 400 bad file type or bounds; 413 file too large; 422 validation; 502 upstream service error; 504 inference timeout (`INFERENCE_TIMEOUT_S`, 60 s by default, 120 s on AWS). Inference 400/413 (bad image, larger than 4000 px) are passed on with inference's `detail`. The gateway allows browser calls (CORS) from the origins in `CORS_ORIGINS`.
 
 ### Polygon feature (used everywhere)
 ```json
