@@ -84,7 +84,7 @@ v3 is best on every stress class. The cost is more false alarms on healthy areas
 ### Checks of the deployed model
 - ONNX vs PyTorch on 32 validation tiles: largest logit difference 2.8e-5; predicted class identical on all 2,097,152 pixels.
 - Full inference pipeline (whole 512 images, overlapping tiles, stitched) on 300 random validation images: mIoU without background 0.382, with background 0.443 (baseline 0.000 / 0.179). This agrees with the training-time score, so normalisation and stitching are correct.
-- Speed on CPU (16 logical CPUs on the dev laptop, ONNX Runtime, in Docker): 512 x 512 image 0.8 s per request; 6000 x 6000 image 40-41 s. The service therefore accepts at most 6000 x 6000 pixels (gateway timeout 60 s). Fewer CPU cores means slower requests.
+- Speed on CPU (16 logical CPUs on the dev laptop, ONNX Runtime, in Docker): 512 x 512 image 0.8 s per request; 6000 x 6000 image 40-41 s. On an 8-core M2 laptop in Docker (Colima, 6 CPUs) 6000 x 6000 took 74.6 s and 4000 x 4000 took 26-31 s end to end, so the service accepts at most 4000 x 4000 pixels (gateway timeout 60 s; ADR 0003). Fewer CPU cores means slower requests.
 
 ## Limitations and known weaknesses
 - **Misses stress.** About a third of nutrient_deficiency pixels and almost half of weed_cluster pixels are predicted as background. An empty result does not mean a healthy field.

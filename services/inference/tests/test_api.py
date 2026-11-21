@@ -145,9 +145,9 @@ def test_16_bit_rejected(client: TestClient) -> None:
 
 
 def test_too_large_rejected(client: TestClient) -> None:
-    r = post(client, encode(np.zeros((3, 2, 6001), np.uint8), "PNG"))
+    r = post(client, encode(np.zeros((3, 2, 4001), np.uint8), "PNG"))
     assert r.status_code == 413
-    assert post(client, encode(np.zeros((3, 2, 6000), np.uint8), "PNG")).status_code == 200
+    assert post(client, encode(np.zeros((3, 2, 4000), np.uint8), "PNG")).status_code == 200
 
 
 def test_request_id_reused_or_created(client: TestClient) -> None:

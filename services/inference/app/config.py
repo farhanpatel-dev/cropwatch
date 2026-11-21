@@ -4,10 +4,10 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# docs/api.md: larger images are rejected with 413. Lowered from 8000 on 2026-11-08: a
-# 6000 x 6000 image took about 41 s on the dev laptop CPU; 8000 x 8000 would exceed the
-# gateway's 60 s timeout.
-MAX_PIXELS_SIDE = 6000
+# docs/api.md, ADR 0003: larger images are rejected with 413. Lowered from 8000 to 6000 on
+# 2026-11-08 and to 4000 on 2026-11-20: 6000 x 6000 took 74.6 s in Docker on an 8-core
+# laptop (over the gateway's 60 s timeout); 4000 x 4000 took 26-31 s end to end.
+MAX_PIXELS_SIDE = 4000
 
 
 @dataclass(frozen=True)
