@@ -10,7 +10,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
     ports:
-      - "5432:5432"
+      # Host port is configurable: a PostgreSQL installed on the computer may already use 5432.
+      - "${POSTGIS_HOST_PORT:-5432}:5432"
     volumes:
       - postgis-data:/var/lib/postgresql/data
       - ./infra/docker/postgis/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
