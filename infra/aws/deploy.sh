@@ -9,6 +9,10 @@
 # runs the database migrations, deploys infra/aws/template.yaml, then uploads the website.
 set -euo pipefail
 
+# The Neon connection string may also be a CW_DATABASE_URL=... line in .env (never committed).
+if [ -z "${CW_DATABASE_URL:-}" ] && [ -f .env ]; then
+  CW_DATABASE_URL=$(grep -E '^CW_DATABASE_URL=' .env | tail -1 | cut -d= -f2- || true)
+fi
 : "${CW_DATABASE_URL:?set CW_DATABASE_URL to the Neon connection string (postgresql+psycopg://...)}"
 REGION=${AWS_REGION:-${CW_REGION:-ca-central-1}}
 STACK=${CW_STACK:-cropwatch}

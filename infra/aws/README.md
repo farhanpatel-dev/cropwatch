@@ -8,7 +8,8 @@ One-time setup:
 
 Deploy (from the repo root; Docker must be running):
 ```bash
-export CW_DATABASE_URL='postgresql+psycopg://USER:PASSWORD@HOST/neondb?sslmode=require'
+# put the Neon string in .env (ignored by Git) as one line:
+#   CW_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST/neondb?sslmode=require
 bash infra/aws/deploy.sh     # prints the website and API URLs
 ```
 Run it again after any change. Remove everything: `aws cloudformation delete-stack --stack-name cropwatch`
