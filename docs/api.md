@@ -18,6 +18,7 @@ Defined once in `ml/configs/classes.yaml` and copied to `services/inference/mode
 | --- | --- |
 | GET /health | `{"status":"ok"}` |
 | GET /api/v1/classes | List of classes above |
+| POST /api/v1/uploads | Proposal (ADR 0004, AWS only): body `{"filename","size"}` -> 201 `{"upload_key","url","fields"}`, a presigned S3 POST valid 10 minutes. 501 when not enabled (local) |
 | GET /api/v1/model-info | Inference's `/model-info` passed through (502 if inference is down). The frontend calls it on page load, which also wakes inference on hosts that scale to zero |
 | POST /api/v1/analyses | Upload and analyse an image |
 | GET /api/v1/analyses | List analyses, newest first |
@@ -31,6 +32,7 @@ Request: multipart/form-data
 - `file` (required): .tif/.tiff (GeoTIFF with CRS), .png, .jpg/.jpeg; max 50 MB
 - `bounds` (required for png/jpg, ignored for GeoTIFF): "minLon,minLat,maxLon,maxLat"
 - `name` (optional)
+- Instead of `file` (AWS, ADR 0004): `upload_key` from POST /api/v1/uploads after posting the file to S3, plus optional `filename`
 
 Response 201:
 ```json
@@ -64,6 +66,8 @@ Responses that return polygons use `{"type": "FeatureCollection", "features": [ 
 | GET /health | liveness |
 | GET /model-info | `{"name":"unet-resnet34","version":"3","mlflow_run_id":"...","input_channels":3,"tile_size":256,"classes":[{"id":0,"name":"background"}, ...]}` |
 | POST /predict | multipart `file`, optional `bounds`. Response 200: `{"model":{"name","version"},"image":{"width","height","crs":"EPSG:4326","bounds":[minLon,minLat,maxLon,maxLat]},"polygons":FeatureCollection}` |
+
+Instead of `file`, `/predict` accepts `image_url` (form field): inference downloads the image, but only from URLs starting with one of `IMAGE_URL_PREFIXES` (the S3 upload bucket; empty locally, so URLs are refused with 400). Proposal, ADR 0004.
 
 Rules: the model takes 3 channels (RGB). For GeoTIFFs with more bands, bands 1 to 3 are used as RGB and the rest are ignored; images with fewer than 3 bands or not 8-bit (uint8) are rejected with 400. Pixel size must not exceed 4000x4000 in the MVP (reject larger with 413; lowered from 8000 to 6000 on 2026-11-08 and to 4000 on 2026-11-20, because 6000x6000 took 74.6 s in Docker on an 8-core laptop and the gateway timeout is 60 s; see ADR 0003); drop polygons smaller than 20 pixels; simplify tolerance of about 1 pixel; `confidence` is the mean softmax probability of the class inside the polygon.
 

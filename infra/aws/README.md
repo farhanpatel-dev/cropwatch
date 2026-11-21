@@ -1,0 +1,15 @@
+# AWS hosting (ADR 0004)
+
+One-time setup:
+1. AWS account (card needed), then in the console: Billing -> Budgets -> create a 1 USD budget alert.
+2. `brew install awscli`, then `aws login` (or `aws configure` with an access key). Region: ca-central-1.
+3. Neon (https://neon.tech, free plan): create a project, run `CREATE EXTENSION postgis;` in its SQL
+   editor, and copy the connection string. Change `postgresql://` to `postgresql+psycopg://`.
+
+Deploy (from the repo root; Docker must be running):
+```bash
+export CW_DATABASE_URL='postgresql+psycopg://USER:PASSWORD@HOST/neondb?sslmode=require'
+bash infra/aws/deploy.sh     # prints the website and API URLs
+```
+Run it again after any change. Remove everything: `aws cloudformation delete-stack --stack-name cropwatch`
+(empty the two S3 buckets first), then delete the three `cropwatch-*` ECR repositories.
