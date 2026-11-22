@@ -7,7 +7,9 @@ Description: CropWatch - IAM role that GitHub Actions on main uses to deploy
 Parameters:
   Repo:
     Type: String
-    Default: farhanpatel-dev/cropwatch
+    # GitHub's OIDC subject names the owner and repo with their numeric IDs (seen in CloudTrail),
+    # so a deleted and re-created repo with the same name cannot use this role.
+    Default: farhanpatel-dev@278683348/cropwatch@1445011006
   Stack:
     Type: String
     Default: cropwatch
