@@ -53,6 +53,46 @@ services:
     # Health check is defined in services/inference/Dockerfile.
     restart: unless-stopped
 
+  geo:
+    build: ./services/geo
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgis:
+        condition: service_healthy
+    # Health check (with a database SELECT 1) is defined in services/geo/Dockerfile.
+    restart: unless-stopped
+
+  gateway:
+    build: ./services/gateway
+    environment:
+      INFERENCE_URL: ${INFERENCE_URL:-http://inference:8001}
+      GEO_URL: ${GEO_URL:-http://geo:8002}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+      INFERENCE_TIMEOUT_S: ${INFERENCE_TIMEOUT_S:-60}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+    ports:
+      - "8000:8000"
+    depends_on:
+      inference:
+        condition: service_healthy
+      geo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
 volumes:
   postgis-data:
   mlflow-data:

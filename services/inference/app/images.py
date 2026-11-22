@@ -4,7 +4,7 @@ Rules (docs/api.md, Inference):
 - GeoTIFF with a CRS: placed by its own transform and CRS; `bounds` is ignored.
 - PNG / JPEG (or a GeoTIFF without CRS): `bounds` "minLon,minLat,maxLon,maxLat" is required.
 - More than 3 bands: bands 1-3 are used as RGB (for example PNG alpha, or NIR in a GeoTIFF).
-- Fewer than 3 bands: rejected (400). Larger than 6000 x 6000: rejected (413).
+- Fewer than 3 bands: rejected (400). Larger than 4000 x 4000: rejected (413).
 - Proposal (not yet in docs/api.md): only 8-bit images (0-255), as in training; others 400.
 """
 

@@ -10,6 +10,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# AWS Lambda Web Adapter (ADR 0004): lets this unchanged web server run on Lambda.
+# It is a Lambda "extension" and does nothing when the image runs in Docker Compose.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+# Readiness by TCP: /health also checks the database, which may be waking up.
+ENV AWS_LWA_PORT=8002 AWS_LWA_READINESS_CHECK_PROTOCOL=tcp
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
