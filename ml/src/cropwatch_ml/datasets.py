@@ -7,7 +7,7 @@ Folder layout (one split, e.g. ml/data/agvision2021_subset/val):
     labels/<class_name>/<key>.png     0/255, one binary mask per class (classes can overlap)
 key = <field_id>_<x1>-<y1>-<x2>-<y2>
 
-Target mask rules (see CLAUDE.md):
+Target mask rules:
     - start as background (0)
     - paint our classes in PAINT_ORDER, so the rarer class wins where labels overlap
     - pixels outside masks or boundaries become IGNORE_INDEX (excluded from loss and IoU)
