@@ -100,6 +100,6 @@ Try it at http://localhost:8001/docs, or:
 ```powershell
 curl.exe -F "file=@field.jpg" -F "bounds=-123.2,49.1,-123.19,49.11" http://localhost:8001/predict
 ```
-`bounds` (minLon,minLat,maxLon,maxLat) is required for PNG/JPEG; a GeoTIFF with a CRS is placed by its own georeferencing. Limits: 8-bit RGB, at most 6000 x 6000 pixels (a 6000 px image takes about 40 s on a 16-thread laptop CPU). The full contract is in [docs/api.md](docs/api.md).
+`bounds` (minLon,minLat,maxLon,maxLat) is required for PNG/JPEG; a GeoTIFF with a CRS is placed by its own georeferencing. Limits: 8-bit RGB, at most 4000 x 4000 pixels (ADR 0003; a 4000 px image takes about 26-31 s in Docker on an 8-core laptop). The full contract is in [docs/api.md](docs/api.md).
 
 If rasterio fails with `proj.db ... comes from another PROJ installation`, a program such as PostgreSQL has set `PROJ_LIB` / `GDAL_DATA` for the whole machine. The service clears them for its own process when `app` is imported; make sure your code imports `app` before rasterio.

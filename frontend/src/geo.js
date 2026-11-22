@@ -1,7 +1,7 @@
 // Small helpers with no React or network code (tested in geo.test.js).
 
 // docs/api.md / ADR 0003: inference rejects images wider or taller than this.
-export const MAX_PIXELS_SIDE = 6000;
+export const MAX_PIXELS_SIDE = 4000;
 export const MAX_UPLOAD_MB = 50;
 export const NEEDS_BOUNDS = [".png", ".jpg", ".jpeg"];
 export const ALLOWED = [".tif", ".tiff", ...NEEDS_BOUNDS];

@@ -133,7 +133,7 @@ export default function UploadPanel({ busy, onAnalyse, mapRef }) {
         {(needsBounds || !file) && (
           <div className="field">
             <label htmlFor="bounds">
-              Image location <small>minLon, minLat, maxLon, maxLat (needed for PNG/JPEG)</small>
+              Where is the field? <small>needed for PNG/JPEG</small>
             </label>
             <div className="row">
               <input
@@ -149,6 +149,12 @@ export default function UploadPanel({ busy, onAnalyse, mapRef }) {
               </button>
             </div>
           </div>
+        )}
+        {(needsBounds || !file) && (
+          <p className="hint">
+            A normal photo does not know where it was taken. Zoom the map to your field and press
+            "Use map view", or type the corners as west, south, east, north (longitude/latitude).
+          </p>
         )}
         {file && !needsBounds && (
           <p className="hint">GeoTIFFs are placed on the map by their own coordinates.</p>
@@ -166,7 +172,7 @@ export default function UploadPanel({ busy, onAnalyse, mapRef }) {
       </form>
 
       <div className="samples">
-        <span>Or try a sample field:</span>
+        <span>Or try a sample field (real farm photos, about 51 m across, placed at a made-up spot):</span>
         <div className="sample-grid">
           {SAMPLES.map((s) => (
             <button

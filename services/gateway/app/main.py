@@ -3,6 +3,8 @@
 Endpoints (docs/api.md, "Gateway (public)"), request flow in docs/architecture.md:
   GET  /health
   GET  /api/v1/classes
+  GET  /api/v1/model-info              inference's /model-info (also wakes a sleeping inference)
+  POST /api/v1/uploads                 presigned S3 upload (only on AWS; 501 otherwise)
   POST /api/v1/analyses                 upload -> inference /predict -> geo -> 201
   GET  /api/v1/analyses, /api/v1/analyses/{id}, /api/v1/analyses/{id}/polygons
   GET  /api/v1/polygons?bbox=&class_id=&analysis_id=&limit=
@@ -26,6 +28,7 @@ import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.aws import UPLOAD_KEY, S3Uploads, SigV4
 from app.config import CLASSES, Settings
 
 log = logging.getLogger("gateway")
@@ -86,13 +89,20 @@ def detail_of(response: httpx.Response) -> str:
         return response.text or f"HTTP {response.status_code}"
 
 
-def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None):
-    """transport lets tests replace the network with fake inference and geo services."""
+def create_app(
+    settings: Settings | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+    uploads: S3Uploads | None = None,
+):
+    """transport and uploads let tests replace the network and S3 with fakes."""
     settings = settings or Settings.from_env()
+    if uploads is None and settings.upload_bucket:
+        uploads = S3Uploads(settings.upload_bucket, settings.aws_region)
+    auth = SigV4(settings.aws_region) if settings.sign_requests else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        async with httpx.AsyncClient(transport=transport) as client:
+        async with httpx.AsyncClient(transport=transport, auth=auth) as client:
             app.state.http = client
             yield
 
@@ -148,23 +158,76 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     def classes() -> list[dict]:
         return CLASSES
 
-    @app.post("/api/v1/analyses", status_code=201)
-    async def create_analysis(
-        request: Request,
-        file: Annotated[UploadFile, File()],
-        bounds: Annotated[str | None, Form()] = None,
-        name: Annotated[str | None, Form()] = None,
-    ) -> dict:
-        filename = file.filename or "upload"
+    @app.get("/api/v1/model-info")
+    async def model_info(request: Request) -> dict:
+        """Which model is serving. The frontend calls this on page load, so on a host that
+        scales to zero, inference starts waking up while the user picks an image."""
+        client: httpx.AsyncClient = request.app.state.http
+        try:
+            r = await client.get(
+                f"{settings.inference_url}/model-info",
+                headers={REQUEST_ID_HEADER: request.state.request_id},
+                timeout=settings.inference_timeout_s,
+            )
+        except httpx.HTTPError as e:
+            raise HTTPException(502, "inference service unreachable") from e
+        if r.status_code != 200:
+            raise HTTPException(502, f"inference service error ({r.status_code})")
+        return r.json()
+
+    def check_extension(filename: str) -> str:
         ext = PurePath(filename).suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(400, "file type must be .tif, .tiff, .png, .jpg or .jpeg")
+        return ext
+
+    @app.post("/api/v1/uploads", status_code=201)
+    def create_upload(body: dict) -> dict:
+        """Proposal (ADR 0004): a presigned S3 POST for one image. The browser posts the file
+        to `url` with `fields`, then calls POST /api/v1/analyses with `upload_key`."""
+        if uploads is None:
+            raise HTTPException(501, "direct uploads are not enabled; send the file instead")
+        ext = check_extension(str(body.get("filename", "")))
         max_bytes = settings.max_upload_mb * 1024 * 1024
-        data = await file.read(max_bytes + 1)
-        if len(data) > max_bytes:
+        size = body.get("size")
+        if isinstance(size, int) and size > max_bytes:
             raise HTTPException(413, f"file is larger than {settings.max_upload_mb} MB")
-        if not data:
-            raise HTTPException(400, "empty file")
+        return uploads.new_upload(ext, max_bytes)
+
+    @app.post("/api/v1/analyses", status_code=201)
+    async def create_analysis(
+        request: Request,
+        file: Annotated[UploadFile | None, File()] = None,
+        upload_key: Annotated[str | None, Form()] = None,
+        filename: Annotated[str | None, Form()] = None,
+        bounds: Annotated[str | None, Form()] = None,
+        name: Annotated[str | None, Form()] = None,
+    ) -> dict:
+        max_bytes = settings.max_upload_mb * 1024 * 1024
+        if file is not None:
+            filename = file.filename or "upload"
+            ext = check_extension(filename)
+            data = await file.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                raise HTTPException(413, f"file is larger than {settings.max_upload_mb} MB")
+            if not data:
+                raise HTTPException(400, "empty file")
+            to_inference = {
+                "files": {"file": (filename, data, file.content_type or "application/octet-stream")}
+            }
+        elif upload_key:
+            if uploads is None or not UPLOAD_KEY.match(upload_key):
+                raise HTTPException(400, "unknown upload_key")
+            ext = check_extension(upload_key)
+            filename = filename or PurePath(upload_key).name
+            size = uploads.size(upload_key)
+            if size is None:
+                raise HTTPException(400, "upload not found; upload the file first")
+            if size > max_bytes:
+                raise HTTPException(413, f"file is larger than {settings.max_upload_mb} MB")
+            to_inference = {"data": {"image_url": uploads.download_url(upload_key)}}
+        else:
+            raise HTTPException(422, "send a file or an upload_key")
         if ext in NEEDS_BOUNDS:
             if not bounds or not bounds.strip():
                 raise HTTPException(400, "bounds are required for PNG and JPEG images")
@@ -174,15 +237,15 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
 
         # 1. Inference
         client: httpx.AsyncClient = request.app.state.http
-        form = {"bounds": bounds} if bounds else {}
+        form = to_inference.get("data", {})
+        if bounds:
+            form["bounds"] = bounds
         try:
             # httpx timeouts apply per network operation, so a total deadline is set here.
             async with asyncio.timeout(settings.inference_timeout_s):
                 r = await client.post(
                     f"{settings.inference_url}/predict",
-                    files={
-                        "file": (filename, data, file.content_type or "application/octet-stream")
-                    },
+                    files=to_inference.get("files"),
                     data=form,
                     headers={REQUEST_ID_HEADER: request.state.request_id},
                     timeout=None,
