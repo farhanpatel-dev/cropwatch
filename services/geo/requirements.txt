@@ -1,0 +1,7 @@
+# Runtime dependencies of the geo service (also used by the Docker image).
+fastapi==0.165.0
+uvicorn==0.54.0
+SQLAlchemy==2.1.9
+GeoAlchemy2==0.21.0
+alembic==1.20.1
+psycopg[binary]==3.3.9
