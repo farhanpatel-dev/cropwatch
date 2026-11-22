@@ -22,6 +22,6 @@ The export writes three files that always change together: `model.onnx`, `model_
 ## Consequences
 - Good: the image has no PyTorch (807 MB in total, including the 98 MB model, rasterio/GDAL and FastAPI). Runs on any CPU host.
 - Good: the export is verified. For v3, the largest logit difference to PyTorch was 2.8e-5 and the predicted class matched on all 2,097,152 pixels of 32 validation tiles. Scoring the full service pipeline on 300 validation images gave the same mIoU as training (0.382 vs 0.371 on the full validation set).
-- Cost: CPU is slow for big images: 0.8 s for 512 x 512, 40-41 s for 6000 x 6000 (16 logical CPUs). This forces the image size limit in ADR 0003.
+- Cost: CPU is slow for big images: 0.8 s for 512 x 512, 40-41 s for 6000 x 6000 (16 logical CPUs), 74.6 s on an 8-core laptop in Docker. This forces the image size limit in ADR 0003.
 - Cost: an extra export step after every training run, and the normalisation must be copied exactly (it is stored in `model_info.json` and read by the service, never hard-coded).
 - Pins to watch: onnx 1.22.0 needs protobuf 5.x, because onnx 1.23 needs protobuf 6 and breaks mlflow 2.17.2.

@@ -9,6 +9,7 @@ import {
   useMap,
 } from "react-leaflet";
 
+import { CLASS_INFO, label } from "../classInfo.js";
 import { formatArea, polygonToLatLngBounds } from "../geo.js";
 
 const START = { center: [41.99, -93.619], zoom: 17 };
@@ -49,9 +50,10 @@ export default function MapView({ current, classes, mapRef }) {
   const onEachFeature = (feature, layer) => {
     const p = feature.properties;
     layer.bindPopup(
-      `<strong>${escapeHtml(p.class_name.replace(/_/g, " "))}</strong><br/>` +
-        `Area: ${formatArea((p.area_m2 || 0) / 10000)}<br/>` +
-        `Confidence: ${Math.round((p.confidence || 0) * 100)}%`,
+      `<strong>${escapeHtml(label(p.class_name))}</strong><br/>` +
+        `${escapeHtml(CLASS_INFO[p.class_name]?.what || "")}<br/>` +
+        `Size: ${formatArea((p.area_m2 || 0) / 10000)}<br/>` +
+        `Model certainty: ${Math.round((p.confidence || 0) * 100)}%`,
     );
   };
 
@@ -102,14 +104,14 @@ export default function MapView({ current, classes, mapRef }) {
         {classes
           .filter((c) => c.id !== 0)
           .map((c) => (
-            <span key={c.id}>
+            <span key={c.id} title={CLASS_INFO[c.name]?.what}>
               <i style={{ background: c.colour }} />
-              {c.name.replace(/_/g, " ")}
+              {label(c.name)}
             </span>
           ))}
         {current?.imageUrl && (
-          <label className="opacity">
-            Image
+          <label className="opacity" title="Fade your photo to compare it with the map below">
+            Your photo
             <input
               type="range"
               min="0"
