@@ -12,6 +12,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# AWS Lambda Web Adapter (ADR 0004): lets this unchanged web server run on Lambda.
+# It is a Lambda "extension" and does nothing when the image runs in Docker Compose.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8001 AWS_LWA_READINESS_CHECK_PATH=/health
+
 # rasterio's wheel bundles GDAL, which still needs the system XML library libexpat
 # (missing from the slim image: "ImportError: libexpat.so.1").
 RUN apt-get update \

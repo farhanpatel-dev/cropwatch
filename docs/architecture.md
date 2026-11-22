@@ -16,7 +16,7 @@ Copy of project file 02. Changes agreed on 2026-11-04: training runs on a local 
 ## Request flow (POST /api/v1/analyses)
 1. Browser sends multipart file (and bounds if needed) to the gateway.
 2. Gateway validates type, size (max 50 MB) and bounds; keeps the file in memory or a temp path.
-3. Gateway calls inference `POST /predict` (timeout 60 s).
+3. Gateway calls inference `POST /predict` (timeout `INFERENCE_TIMEOUT_S`, 60 s by default, 120 s on AWS).
 4. Inference reads the image, normalises, cuts overlapping 256x256 tiles, runs the ONNX model, stitches the class mask, polygonizes with rasterio, simplifies, drops tiny shapes, reprojects to EPSG:4326, computes area and returns a GeoJSON FeatureCollection.
 5. Gateway calls geo `POST /analyses`, then `POST /analyses/{id}/polygons`, then `GET /stats?analysis_id=`.
 6. Gateway returns 201 with analysis id, model info, image bounds and stats.
@@ -31,7 +31,7 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 ## Rules
 - Services communicate only via HTTP/JSON per 03-api-contract. No shared code imports.
 - Only geo connects to PostGIS.
-- Every service exposes GET /health and logs a request id.
+- Every service exposes GET /health and logs a request id. The id travels in the `X-Request-ID` header: the gateway creates one (or reuses the browser's), sends it to inference and geo, and returns it on every response.
 - Config only from environment variables (.env.example). No secrets in Git.
 - Model hand-off: `model.onnx` + `classes.yaml` (id, name, colour). Inference reports model name/version from `model_info.json` next to the file.
 
@@ -53,6 +53,8 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 | Cloud | Azure training lab only | No cost goal | AWS/GCP/Azure with IaC |
 
 ## Hosting decision
+Superseded on 2026-11-21 by ADR 0004: the whole stack runs on AWS always-free services (Lambda, S3 + CloudFront) with a Neon PostgreSQL database. The notes below are the original plan.
+
 - Frontend: Vercel Hobby plan (free; personal, non-commercial use only; re-check Vercel's terms and limits before relying on them). Use Vercel's GitHub integration and set `VITE_API_URL` in the Vercel project settings.
 - Backend: not hosted on Vercel (Vercel runs short-lived serverless functions, not long-running containers with ONNX Runtime and rasterio). Default: recorded demo of the local stack; a free backend host is optional (cut order item 2).
 
@@ -74,6 +76,7 @@ ml/ (local computer) -> MLflow:5000 -> model.onnx -> services/inference/models/
 POSTGRES_USER=cropwatch
 POSTGRES_PASSWORD=change_me_locally
 POSTGRES_DB=cropwatch
+POSTGIS_HOST_PORT=5432
 DATABASE_URL=postgresql+psycopg://cropwatch:change_me_locally@postgis:5432/cropwatch
 INFERENCE_URL=http://inference:8001
 GEO_URL=http://geo:8002
@@ -82,6 +85,8 @@ MODEL_INFO_PATH=/app/models/model_info.json
 TILE_SIZE=256
 TILE_OVERLAP=32
 MAX_UPLOAD_MB=50
+INFERENCE_TIMEOUT_S=60
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 MLFLOW_TRACKING_URI=http://mlflow:5000
 VITE_API_URL=http://localhost:8000
 ```

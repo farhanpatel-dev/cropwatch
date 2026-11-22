@@ -71,6 +71,7 @@ services:
       INFERENCE_URL: ${INFERENCE_URL:-http://inference:8001}
       GEO_URL: ${GEO_URL:-http://geo:8002}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+      INFERENCE_TIMEOUT_S: ${INFERENCE_TIMEOUT_S:-60}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8000:8000"
