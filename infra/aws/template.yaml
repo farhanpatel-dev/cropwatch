@@ -1,0 +1,261 @@
+# CropWatch on AWS (ADR 0004): three Lambda functions running the service images, an S3
+# bucket for uploads, and the frontend on S3 + CloudFront. The database is Neon (outside AWS).
+# Deployed by infra/aws/deploy.sh; do not deploy by hand.
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CropWatch - crop-stress detection (gateway, inference, geo on Lambda; site on CloudFront)
+
+Parameters:
+  InferenceImageUri:
+    Type: String
+  GeoImageUri:
+    Type: String
+  GatewayImageUri:
+    Type: String
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: postgresql+psycopg://...?sslmode=require (Neon)
+  InferenceMemoryMb:
+    Type: Number
+    Default: 3008
+    Description: More memory also gives more CPU (10240 MB = 6 vCPU). New accounts are capped at 3008 until a quota increase.
+
+Resources:
+  # ---------- storage ----------
+  UploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: delete-uploads-after-a-day
+            Status: Enabled
+            Prefix: uploads/
+            ExpirationInDays: 1
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [POST]
+            AllowedOrigins:
+              - !Sub "https://${Distribution.DomainName}"
+              - http://localhost:5173
+            AllowedHeaders: ["*"]
+            MaxAge: 3600
+
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  # ---------- website ----------
+  SiteOriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-site"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: CropWatch website
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        HttpVersion: http2and3
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !Ref SiteOriginAccess
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # managed "CachingOptimized"
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  # ---------- permissions ----------
+  InferenceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
+  GeoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: uploads-and-internal-calls
+          PolicyDocument:
+            Statement:
+              # Presigned POST/GET URLs act with the gateway's permissions.
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub "${UploadBucket.Arn}/uploads/*"
+              # Only the gateway may call inference and geo (their URLs use AWS_IAM auth).
+              - Effect: Allow
+                Action: [lambda:InvokeFunctionUrl, lambda:InvokeFunction]
+                Resource: [!GetAtt InferenceFunction.Arn, !GetAtt GeoFunction.Arn]
+
+  # ---------- functions ----------
+  InferenceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      PackageType: Image
+      Code: { ImageUri: !Ref InferenceImageUri }
+      Architectures: [arm64]
+      MemorySize: !Ref InferenceMemoryMb
+      Timeout: 130
+      Role: !GetAtt InferenceRole.Arn
+      Environment:
+        Variables:
+          IMAGE_URL_PREFIXES: !Sub "https://${UploadBucket}.s3.${AWS::Region}.amazonaws.com/uploads/,https://${UploadBucket}.s3.amazonaws.com/uploads/"
+
+  GeoFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      PackageType: Image
+      Code: { ImageUri: !Ref GeoImageUri }
+      # Migrations run from deploy.sh, not on every cold start.
+      ImageConfig:
+        Command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8002"]
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 30
+      Role: !GetAtt GeoRole.Arn
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+
+  GatewayFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      PackageType: Image
+      Code: { ImageUri: !Ref GatewayImageUri }
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 150
+      Role: !GetAtt GatewayRole.Arn
+      Environment:
+        Variables:
+          INFERENCE_URL: !GetAtt InferenceUrl.FunctionUrl
+          GEO_URL: !GetAtt GeoUrl.FunctionUrl
+          UPLOAD_BUCKET: !Ref UploadBucket
+          SIGN_REQUESTS: "true"
+          MAX_UPLOAD_MB: "50"
+          # 3008 MB Lambda: 2500 px took 38 s, 4000 px over 60 s (measured 2026-11-21).
+          INFERENCE_TIMEOUT_S: "120"
+          CORS_ORIGINS: !Sub "https://${Distribution.DomainName},http://localhost:5173"
+
+  InferenceUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref InferenceFunction
+      AuthType: AWS_IAM
+
+  GeoUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref GeoFunction
+      AuthType: AWS_IAM
+
+  GatewayUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref GatewayFunction
+      AuthType: NONE # public API; CORS is handled by the gateway itself
+
+  GatewayPublicUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GatewayFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  GatewayPublicInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GatewayFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  # Keep logs one week (CloudWatch Logs has a small free allowance).
+  InferenceLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${InferenceFunction}"
+      RetentionInDays: 7
+  GeoLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${GeoFunction}"
+      RetentionInDays: 7
+  GatewayLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${GatewayFunction}"
+      RetentionInDays: 7
+
+Outputs:
+  SiteUrl:
+    Value: !Sub "https://${Distribution.DomainName}"
+  ApiUrl:
+    Value: !GetAtt GatewayUrl.FunctionUrl
+  SiteBucket:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Value: !Ref Distribution

@@ -16,6 +16,9 @@ class Settings:
     model_info_path: Path
     tile_size: int
     tile_overlap: int
+    # Proposal (cloud hosting, ADR 0004): /predict may fetch the image from a URL instead of
+    # an upload, but only from these prefixes (the S3 upload bucket). Empty: URLs refused.
+    image_url_prefixes: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -24,4 +27,7 @@ class Settings:
             model_info_path=Path(os.environ.get("MODEL_INFO_PATH", "/app/models/model_info.json")),
             tile_size=int(os.environ.get("TILE_SIZE", "256")),
             tile_overlap=int(os.environ.get("TILE_OVERLAP", "32")),
+            image_url_prefixes=tuple(
+                p.strip() for p in os.environ.get("IMAGE_URL_PREFIXES", "").split(",") if p.strip()
+            ),
         )

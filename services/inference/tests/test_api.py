@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from rasterio.io import MemoryFile
 from rasterio.transform import Affine
 
+from app.config import Settings
 from app.main import create_app
 from app.model import ModelInfo, Segmenter
 
@@ -167,3 +168,53 @@ def test_real_model_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
     for f in r.json()["polygons"]["features"]:
         assert 1 <= f["properties"]["class_id"] <= 3
         assert 0.25 <= f["properties"]["confidence"] <= 1.0
+
+
+BUCKET = "https://uploads.example.com/"
+
+
+@pytest.fixture
+def url_client():
+    settings = Settings(Path("m.onnx"), Path("m.json"), 256, 32, image_url_prefixes=(BUCKET,))
+    with TestClient(create_app(Segmenter(fake_info(), RedIsWeeds()), settings)) as c:
+        yield c
+
+
+class FakeResponse:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def read(self, n: int = -1) -> bytes:
+        return self.data if n < 0 else self.data[:n]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        pass
+
+
+def test_image_url_from_allowed_prefix(url_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda url, timeout: seen.append(url) or FakeResponse(field_png())
+    )
+    r = url_client.post("/predict", data={"image_url": BUCKET + "k.png?sig=1", "bounds": BOUNDS})
+    assert r.status_code == 200, r.text
+    assert seen == [BUCKET + "k.png?sig=1"]
+
+
+def test_image_url_other_host_refused(url_client) -> None:
+    r = url_client.post(
+        "/predict", data={"image_url": "http://169.254.169.254/x", "bounds": BOUNDS}
+    )
+    assert r.status_code == 400
+
+
+def test_image_url_refused_when_not_configured(client: TestClient) -> None:
+    r = client.post("/predict", data={"image_url": BUCKET + "k.png", "bounds": BOUNDS})
+    assert r.status_code == 400
+
+
+def test_neither_file_nor_url_is_422(client: TestClient) -> None:
+    assert client.post("/predict", data={"bounds": BOUNDS}).status_code == 422

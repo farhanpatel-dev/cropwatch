@@ -3,7 +3,7 @@
 Endpoints (docs/api.md, "Inference : http://inference:8001"):
   GET  /health       {"status": "ok"}
   GET  /model-info   name, version, MLflow run id, tile size, classes, preprocessing
-  POST /predict      multipart `file`, optional `bounds` -> model, image, polygons
+  POST /predict      multipart `file` (or `image_url`), optional `bounds` -> model, image, polygons
 
 Run locally (from services/inference, with MODEL_PATH and MODEL_INFO_PATH set):
   .venv\\Scripts\\python.exe -m uvicorn app.main:app --port 8001
@@ -11,6 +11,8 @@ Run locally (from services/inference, with MODEL_PATH and MODEL_INFO_PATH set):
 
 import logging
 import time
+import urllib.error
+import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -25,6 +27,21 @@ from app.polygons import image_bounds, polygonize
 log = logging.getLogger("inference")
 # Proposal: header name is not fixed in the docs yet. Reused if the gateway sends one.
 REQUEST_ID_HEADER = "X-Request-ID"
+MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # same as the gateway's MAX_UPLOAD_MB default
+
+
+def download(url: str, prefixes: tuple[str, ...]) -> bytes:
+    """Fetch an image from an allowed URL (the gateway's S3 upload bucket, ADR 0004)."""
+    if not prefixes or not any(url.startswith(p) for p in prefixes):
+        raise HTTPException(status_code=400, detail="image_url is not allowed")
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            data = r.read(MAX_DOWNLOAD_BYTES + 1)
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise HTTPException(status_code=400, detail="could not download image_url") from e
+    if len(data) > MAX_DOWNLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="image is larger than 50 MB")
+    return data
 
 
 def load_segmenter(settings: Settings) -> Segmenter:
@@ -39,12 +56,13 @@ def load_segmenter(settings: Settings) -> Segmenter:
     return seg
 
 
-def create_app(segmenter: Segmenter | None = None) -> FastAPI:
+def create_app(segmenter: Segmenter | None = None, settings: Settings | None = None) -> FastAPI:
     """segmenter=None loads the model from env settings at startup (tests pass a fake)."""
+    settings = settings or Settings.from_env()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.segmenter = segmenter or load_segmenter(Settings.from_env())
+        app.state.segmenter = segmenter or load_segmenter(settings)
         info = app.state.segmenter.info
         log.info(
             "model loaded: %s version %s (run %s)", info.name, info.version, info.mlflow_run_id
@@ -91,12 +109,19 @@ def create_app(segmenter: Segmenter | None = None) -> FastAPI:
     @app.post("/predict")
     def predict(
         request: Request,
-        file: Annotated[UploadFile, File()],
+        file: Annotated[UploadFile | None, File()] = None,
+        image_url: Annotated[str | None, Form()] = None,
         bounds: Annotated[str | None, Form()] = None,
     ) -> dict:
         seg: Segmenter = request.app.state.segmenter
+        if file is not None:
+            data = file.file.read()
+        elif image_url:
+            data = download(image_url, settings.image_url_prefixes)
+        else:
+            raise HTTPException(status_code=422, detail="send a file (or image_url)")
         try:
-            placed = read_image(file.file.read(), bounds)
+            placed = read_image(data, bounds)
         except ImageError as e:
             raise HTTPException(status_code=e.status_code, detail=str(e)) from e
         h, w = placed.rgb.shape[:2]
