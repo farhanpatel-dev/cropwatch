@@ -13,8 +13,13 @@ set -euo pipefail
 if [ -z "${CW_DATABASE_URL:-}" ] && [ -f .env ]; then
   CW_DATABASE_URL=$(grep -E '^CW_DATABASE_URL=' .env | tail -1 | cut -d= -f2- || true)
 fi
-: "${CW_DATABASE_URL:?set CW_DATABASE_URL to the Neon connection string (postgresql+psycopg://...)}"
 REGION=${AWS_REGION:-${CW_REGION:-us-east-2}}
+# In GitHub Actions it comes from the encrypted SSM parameter /cropwatch/database-url.
+if [ -z "${CW_DATABASE_URL:-}" ]; then
+  CW_DATABASE_URL=$(aws ssm get-parameter --region "$REGION" --name /cropwatch/database-url \
+    --with-decryption --query Parameter.Value --output text 2>/dev/null || true)
+fi
+: "${CW_DATABASE_URL:?set CW_DATABASE_URL to the Neon connection string (postgresql+psycopg://...)}"
 STACK=${CW_STACK:-cropwatch}
 TAG=$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- services || echo "-dirty")
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)

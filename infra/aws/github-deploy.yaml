@@ -1,0 +1,88 @@
+# Lets GitHub Actions deploy CropWatch from the main branch (.github/workflows/deploy.yml).
+# GitHub proves who it is with a short-lived OIDC token, so no AWS keys are stored in GitHub.
+# Deploy once by hand (see infra/aws/README.md), not from the workflow itself.
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CropWatch - IAM role that GitHub Actions on main uses to deploy
+
+Parameters:
+  Repo:
+    Type: String
+    Default: farhanpatel-dev/cropwatch
+  Stack:
+    Type: String
+    Default: cropwatch
+    Description: Name of the app stack deployed by infra/aws/deploy.sh
+
+Resources:
+  GitHubOidc:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: github-deploy-cropwatch # outside the cropwatch-* pattern below, so it cannot edit itself
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref GitHubOidc }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # Only workflows running on main of this repo, nothing from forks or other branches.
+                token.actions.githubusercontent.com:sub: !Sub "repo:${Repo}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: deploy-cropwatch
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action: ecr:*
+                Resource: !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/cropwatch-*"
+              - Effect: Allow
+                Action: cloudformation:*
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${Stack}/*"
+              - Effect: Allow
+                Action: [cloudformation:ValidateTemplate, cloudformation:GetTemplateSummary]
+                Resource: "*"
+              # What the app stack creates: functions, roles, buckets, logs, CloudFront.
+              - Effect: Allow
+                Action: lambda:*
+                Resource: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${Stack}-*"
+              - Effect: Allow
+                Action: iam:*
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${Stack}-*"
+              - Effect: Allow
+                Action: s3:*
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${Stack}-*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${Stack}-*/*"
+              - Effect: Allow
+                Action: logs:*
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${Stack}-*"
+              - Effect: Allow
+                Action: [logs:DescribeLogGroups]
+                Resource: "*"
+              - Effect: Allow
+                Action: cloudfront:*
+                Resource: "*"
+              # The Neon connection string, stored as an encrypted SSM parameter.
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cropwatch/*"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
+
+Outputs:
+  RoleArn:
+    Value: !GetAtt DeployRole.Arn
