@@ -1,4 +1,5 @@
-# Deploy to AWS (ADR 0004) whenever main changes, or by hand from the Actions tab.
+# Deploy to AWS (ADR 0004) whenever main changes, or by hand from the Actions tab,
+# but only after the CI lint and tests pass.
 # Uses the role from infra/aws/github-deploy.yaml; no AWS keys are stored in GitHub.
 name: Deploy
 
@@ -9,7 +10,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write # lets the job ask GitHub for the OIDC token AWS checks
   contents: read
 
 # One deploy at a time; a newer push waits instead of running in parallel.
@@ -18,7 +18,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The same lint and tests as on pull requests; a failure stops the deploy.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: ci
+    permissions:
+      id-token: write # lets the job ask GitHub for the OIDC token AWS checks
+      contents: read
     # Native arm64, the same architecture as the Lambda functions.
     runs-on: ubuntu-24.04-arm
     steps:
